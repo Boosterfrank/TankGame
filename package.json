@@ -1,0 +1,13 @@
+{
+  "name": "unnamed-tank-game",
+  "version": "0.1.0",
+  "description": "A browser artillery tank game by Qubiplex, inspired by ShellShock Live. Destructible terrain, 300+ weapons, bots, hot-seat multiplayer.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node scripts/test-catalog.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

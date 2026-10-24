@@ -98,7 +98,9 @@ export class Renderer {
   drawMenu(t) {
     const ctx = this.begin();
     this.makeBackground(this.bgSeed ?? 42);
-    ctx.drawImage(this.bg, 0, 0);
+    // slow parallax drift of the nebula
+    const ox = -24 + Math.sin(t * 0.07) * 20, oy = -14 + Math.cos(t * 0.05) * 12;
+    ctx.drawImage(this.bg, ox, oy, WORLD_W * 1.04, WORLD_H * 1.04);
     // slow drifting sheen
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -149,14 +151,70 @@ export class Renderer {
     for (const tank of game.tanks) if (tank.alive) this.drawTag(ctx, tank, game, t);
     const cur = game.current;
     if (game.phase === 'aim' && cur && !cur.locked && !game.waitingPass) this.drawAim(ctx, cur, game, t);
+    if (game.dev?.revealAims) for (const tk of game.tanks) if (tk.isBot && tk.alive && tk.shot) this.drawTrajectory(ctx, tk, tk.shot, game, 'rgba(255,82,82,0.8)');
+    if (game.dev?.hitboxes || game.dev?.debug) this.drawDebug(ctx, game);
     ctx.restore();
     this.drawOverlay(ctx, game, t);
   }
 
+  drawTrajectory(ctx, tk, shot, game, color) {
+    const w = getWeapon(shot.weaponId, tk.tier(shot.weaponId));
+    if (!w) return;
+    const spec = normSpec(w.spec);
+    const tip = tk.barrelTip();
+    const a = rad(shot.angle);
+    ctx.save();
+    ctx.fillStyle = color;
+    if (spec.laser) {
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(tip.x + Math.cos(a) * 2000, tip.y - Math.sin(a) * 2000); ctx.stroke();
+    } else {
+      const v = shot.power * PHYS.launchSpeed * spec.speed;
+      let x = tip.x, y = tip.y, vx = Math.cos(a) * v, vy = -Math.sin(a) * v;
+      const dt = 1 / 30;
+      for (let i = 0; i < 240; i++) {
+        vy += PHYS.gravity * spec.g * dt; vx += game.wind * PHYS.windAccel * spec.wind * dt;
+        x += vx * dt; y += vy * dt;
+        if (game.terrain.solid(x, y) || y > WORLD_H || x < -50 || x > WORLD_W + 50) break;
+        if (i % 2 === 0) { ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+    ctx.restore();
+  }
+
+  drawDebug(ctx, game) {
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (const tk of game.tanks) {
+      if (!tk.alive) continue;
+      ctx.strokeStyle = 'rgba(0,255,120,0.8)';
+      ctx.beginPath(); ctx.arc(tk.x, tk.cy, PHYS.tankRadius, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#0f0'; ctx.fillRect(tk.x - 1, tk.y - 1, 3, 3);
+    }
+    for (const p of game.projectiles) {
+      ctx.strokeStyle = 'rgba(255,255,0,0.8)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.spec.r + 1, 0, Math.PI * 2); ctx.stroke();
+      if (p.spec.boom?.r) { ctx.strokeStyle = 'rgba(255,120,0,0.35)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.spec.boom.r, 0, Math.PI * 2); ctx.stroke(); }
+    }
+    for (const c of game.crates) { ctx.strokeStyle = 'rgba(255,215,0,0.8)'; ctx.strokeRect(c.x - 28, c.y - 34, 56, 68); }
+    if (game.dev?.debug) {
+      ctx.font = '12px monospace'; ctx.fillStyle = '#9f9';
+      for (const tk of game.tanks) if (tk.alive) ctx.fillText(`${Math.round(tk.x)},${Math.round(tk.y)} hp${Math.round(tk.hp)}${tk.shot ? ` ${tk.shot.weaponId} ${Math.round(tk.shot.angle)}°/${Math.round(tk.shot.power)}` : ''}`, tk.x + 20, tk.y - 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(10, WORLD_H - 70, 420, 60);
+      ctx.fillStyle = '#9f9';
+      ctx.fillText(`phase ${game.phase}  round ${game.round}  wind ${game.wind}  t ${game.time.toFixed(2)}`, 18, WORLD_H - 50);
+      ctx.fillText(`projectiles ${game.projectiles.length}  queued ${game.spawnQueue.length}  parts ${game.fx.parts.length}  dirty ${game.terrain.dirtyRect ? 'yes' : 'no'}`, 18, WORLD_H - 32);
+      ctx.fillText(`seed ${game.seed}  map ${game.terrain.styleId}  online ${game.online ? (game.online.isHost ? 'host' : 'guest') : 'no'}`, 18, WORLD_H - 14);
+    }
+    ctx.restore();
+  }
+
   drawCrate(ctx, c, t) {
     ctx.save();
-    ctx.translate(c.x, c.y);
-    if (!c.landed && !c.chuteless) {
+    const dropping = c.landed && c.drop < 1;
+    const ease = 1 - Math.pow(1 - c.drop, 2);
+    ctx.translate(c.x, dropping ? c.y - 460 * (1 - ease) : c.y);
+    if (dropping) {
       const sway = Math.sin(t * 2 + c.x) * 0.08;
       ctx.rotate(sway);
       ctx.fillStyle = c.type === 'weapon' ? 'rgba(255,183,77,0.85)' : 'rgba(105,240,174,0.85)';
@@ -237,7 +295,7 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
     ctx.strokeText(tk.name, tk.x, y0 - 4);
-    ctx.fillStyle = tk.locked && game.phase === 'aim' ? '#9e9e9e' : '#fff';
+    ctx.fillStyle = tk.locked && game.phase === 'aim' ? '#9e9e9e' : tk.connected === false ? '#ff8a80' : '#fff';
     ctx.fillText(tk.name, tk.x, y0 - 4);
     // hp
     ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(x0 - 1, y0 + 1, w + 2, 6);
@@ -254,6 +312,9 @@ export class Renderer {
     } else if (tk.locked && game.phase === 'aim') {
       ctx.fillStyle = '#9e9e9e'; ctx.font = 'bold 11px Rajdhani, sans-serif';
       ctx.fillText('LOCKED', tk.x, y0 - 22);
+    } else if (tk.connected === false) {
+      ctx.fillStyle = '#ff8a80'; ctx.font = 'bold 11px Rajdhani, sans-serif';
+      ctx.fillText('OFFLINE', tk.x, y0 - 22);
     }
     ctx.restore();
   }
@@ -311,7 +372,7 @@ export class Renderer {
       ctx.fillStyle = mag > 7 ? '#ff5252' : mag > 4 ? '#ffb300' : '#4fc3ff';
       ctx.fillRect(dir > 0 ? cx : cx - len, cy - 4, len, 8);
       ctx.beginPath();
-      const ax = cx + dir * len;
+      const ax = cx + dir * len + dir * Math.sin(t * 6) * 2;
       ctx.moveTo(ax, cy - 9); ctx.lineTo(ax + dir * 10, cy); ctx.lineTo(ax, cy + 9); ctx.closePath(); ctx.fill();
     } else { ctx.fillStyle = '#90a4ae'; ctx.textAlign = 'center'; ctx.fillText('NONE', cx, cy + 6); }
     // round + timer

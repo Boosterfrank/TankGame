@@ -13,8 +13,40 @@ everything is rendered procedurally on a `<canvas>`.
 npm start          # zero-dependency static server on http://localhost:8080
 ```
 
-Any static file server works (`python3 -m http.server 8080`, GitHub Pages, Netlify…).
+Any static file server works (`python3 -m http.server 8080`, Cloudflare Pages, GitHub Pages…).
 The game uses ES modules, so it must be served over HTTP rather than opened from `file://`.
+
+## Online play (Cloudflare Workers)
+
+Online rooms run on a tiny Cloudflare Worker with Durable Objects (`worker/`). The Worker only
+relays locked-in shots; every client simulates each volley itself from a shared seed, in lockstep
+with a fixed timestep, so the relay never runs physics and comfortably fits the free plan.
+
+Deploy it once:
+
+```
+cd worker
+npm install
+npx wrangler login          # opens the browser once
+npm run deploy              # prints https://unnamed-tank-game-relay.<account>.workers.dev
+```
+
+Then either set `ONLINE_SERVER` in `src/config.js` to that URL before deploying the game, or paste
+it into **Settings → Online relay server** in the running game. `npm run dev` inside `worker/`
+starts a local relay on `http://localhost:8787` for development.
+
+Rooms are created from **Play Online**: public rooms appear in the browser, private rooms are
+joined by their five-character code. The host controls settings and bots, everyone else readies up,
+and chat works in the lobby and in-game (Enter). If a player disconnects mid-game their tank is
+destroyed at the next volley; if the host leaves, the next player becomes host.
+
+## Deploying the game to Cloudflare Pages
+
+1. Push the repo to GitHub and in the Cloudflare dashboard choose Workers & Pages → Create →
+   Pages → Connect to Git.
+2. Framework preset **None**, build command empty, build output directory `/`.
+3. Deploy. Every push to the production branch redeploys; the relay Worker is deployed separately
+   from `worker/` and its URL goes in `src/config.js` (`ONLINE_SERVER`).
 
 ## How it works
 
@@ -44,6 +76,13 @@ The game uses ES modules, so it must be served over HTTP rather than opened from
 | `E` | Items |
 | `Esc` | Close panel / leave game |
 
+## Developer tools
+
+A hidden developer console (profile cheats, god mode, infinite ammo, time scale, debug overlays,
+bot-aim reveal, a weapon test range and a spectator bot battle) is gated behind a password. The
+gate opens after clicking the Qubiplex logo in the top bar five times quickly; the password hash
+lives in `src/ui/devtools.js`. Once unlocked, the `` ` `` key or the DEV button toggles the panel.
+
 ## Project layout
 
 ```
@@ -61,11 +100,15 @@ src/fx.js             particles, explosions, beams, floating text, screen shake
 src/audio.js          procedural WebAudio sound effects
 src/profile.js        localStorage profile: XP, levels, gears, mastery
 src/icons.js          procedural pictogram icons for weapons and items
+src/online.js         online session: relay protocol client and game bridge
 src/ui/hud.js         bottom HUD, weapons grid, items panel
 src/ui/screens.js     title, hub, lobby, armory, help, settings, results
-src/app.js            screen flow, input, render loop
+src/ui/online.js      room browser and online lobby with chat
+src/ui/devtools.js    password-gated developer console
+src/app.js            screen flow, input, fixed-timestep render loop
+worker/               Cloudflare Worker relay (Durable Object rooms + public room directory)
 assets/               Qubiplex logo + favicon
-scripts/              node tests (catalog sanity, headless Playwright smoke/weapon tests)
+scripts/              node tests (catalog sanity, headless Playwright smoke/weapon/online tests)
 ```
 
 ### Adding a weapon
@@ -93,6 +136,8 @@ npm test                       # catalog + terrain sanity checks (node only)
 npm start & node scripts/smoke.mjs --shots     # headless browser: plays rounds, screenshots
 node scripts/test-weapons.mjs  # fires every weapon family and tier in a headless game
 node scripts/test-flow.mjs     # hot-seat, team mode, items, mouse aiming
+(cd worker && npm run dev) & node scripts/test-relay.mjs    # relay protocol with two sockets
+node scripts/test-online.mjs   # two browsers play an online match; checks both stay in lockstep
 ```
 
 The browser tests use the Playwright package if it is installed globally or locally.

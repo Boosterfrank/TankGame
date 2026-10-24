@@ -33,6 +33,10 @@ export class Tank {
     this.lastHitBy = null;
     this.deathTime = 0;
     this.ai = null;
+    this.netId = null;
+    this.connected = true;
+    this.roundItems = [];
+    this.dummy = false;
   }
 
   get cy() { return this.y - 12; }

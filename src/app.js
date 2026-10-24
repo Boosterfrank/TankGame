@@ -8,6 +8,11 @@ import { HUD } from './ui/hud.js';
 import { loadProfile, saveProfile, unlockedIds, allTiers, applyGameResults } from './profile.js';
 import { MAP_STYLES } from './terrain-gen.js';
 import * as S from './ui/screens.js';
+import { onlineScreen, onlineLobbyScreen } from './ui/online.js';
+import { DevTools } from './ui/devtools.js';
+import { ONLINE_SERVER } from './config.js';
+
+const STEP = 1 / 60;
 
 export class App {
   constructor() {
@@ -29,7 +34,14 @@ export class App {
     this.time = 0;
     this.spectateEl = null;
     this.lastGameConfig = null;
+    this.session = null;        // OnlineSession while connected to a room
+    this.acc = 0;               // fixed-timestep accumulator
+    this.chat = document.getElementById('chat');
+    this.chatOpen = false;
+    this.dev = new DevTools(this);
   }
+
+  serverUrl() { return (this.profile.settings.server || ONLINE_SERVER || '').trim(); }
 
   init() {
     this.fit();
@@ -68,11 +80,18 @@ export class App {
       case 'help': node = S.helpScreen(this); break;
       case 'settings': node = S.settingsScreen(this); break;
       case 'results': node = S.resultsScreen(this, ...args); break;
+      case 'online': node = onlineScreen(this); break;
+      case 'onlineLobby': node = onlineLobbyScreen(this); break;
       case null: break;
     }
     if (node) this.screens.append(node);
-    if (name && name !== 'results' && this.game) { this.game = null; this.hud.hide(); this.removeSpectate(); }
+    if (name && name !== 'results' && this.game) { this.game = null; if (this.session) this.session.game = null; this.hud.hide(); this.removeSpectate(); this.closeChat(); }
+    if (name && name !== 'onlineLobby' && name !== 'results' && this.session && !this.game) {
+      // Leaving the online flow entirely drops the room connection.
+      if (!['online', 'onlineLobby'].includes(name) && this.session.phase !== 'game') { this.session.leave(); this.session = null; }
+    }
     if (name) this.audio.play('click');
+    this.dev.onScreen(name);
   }
 
   toast(text, color = '#ffd740') {
@@ -121,11 +140,17 @@ export class App {
   startGame(config) {
     this.lastGameConfig = config;
     const ids = unlockedIds(this.profile), tiers = allTiers(this.profile);
-    const players = config.players.map((p) => p.isBot ? p : { ...p, unlockedIds: ids, tiers });
+    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers });
     this.show(null);
     this.audio.init();
-    this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio });
+    this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio, online: config.online || null, deadline: config.deadline || null });
     const g = this.game;
+    g.dev = this.dev.flags;
+    this.acc = 0;
+    if (config.online) {
+      const onClose = () => { if (this.game === g) { this.hud.hide(); this.removeSpectate(); this.closeChat(); this.game = null; this.session = null; this.modal.innerHTML = ''; this.modal.classList.remove('hidden'); this.modal.append(S.confirmModal('Connection to the room was lost.', () => { this.closeModal(); this.show('menu'); }, () => { this.closeModal(); this.show('menu'); })); } };
+      config.online.on('close', onClose);
+    }
     g.on.pass = (tank) => this.showPass(tank);
     g.on.gameOver = (results) => this.endGame(results);
     g.on.crate = (tank, text) => { if (!tank.isBot) this.toast(text); };
@@ -143,6 +168,27 @@ export class App {
     this.timeScale = 1;
     this.removeSpectate();
     this.renderer.showBanner(MAP_STYLES.find((m) => m.id === g.terrain.styleId)?.name || 'BATTLE', 'Get ready', '#4fc3ff', 1.5);
+    this.chat.innerHTML = '';
+    this.chat.classList.toggle('hidden', !config.online);
+  }
+
+  // ------------------------------------------------------------ in-game chat (online)
+  openChat() {
+    if (!this.game?.online || this.chatOpen) return;
+    this.chatOpen = true;
+    const input = el('input.chat-input.ingame', { type: 'text', placeholder: 'Say something… (Enter to send, Esc to cancel)', maxlength: 160 });
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { this.session?.sendChat(input.value); this.closeChat(); }
+      if (e.key === 'Escape') this.closeChat();
+    });
+    this.chat.append(input);
+    input.focus();
+  }
+
+  closeChat() {
+    this.chatOpen = false;
+    this.chat.querySelector('.chat-input')?.remove();
   }
 
   showPass(tank) {
@@ -164,6 +210,7 @@ export class App {
     }
     this.hud.hide();
     this.removeSpectate();
+    this.closeChat();
     this.timeScale = 1;
     this.renderer.banner = null;
     this.show('results', results, summary);
@@ -171,7 +218,7 @@ export class App {
 
   confirmLeave() {
     if (!this.game) return;
-    this.confirm('Leave the battle? Progress from this game will be lost.', () => this.show('menu'));
+    this.confirm('Leave the battle? Progress from this game will be lost.', () => { if (this.session) { this.session.leave(); this.session = null; } this.show('menu'); });
   }
 
   fire() { this.game?.fire(); }
@@ -192,7 +239,9 @@ export class App {
       this.input.keys.add(e.code);
       if (!g) return;
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
-      if (e.code === 'Space' || e.code === 'Enter') { if (this.hud.overlayMode) this.hud.closeOverlay(); else this.fire(); }
+      if (e.code === 'Enter' && g.online) { if (this.hud.overlayMode) this.hud.closeOverlay(); this.openChat(); }
+      else if (e.code === 'Space' || e.code === 'Enter') { if (this.hud.overlayMode) this.hud.closeOverlay(); else this.fire(); }
+      else if (e.code === 'Backquote') { this.dev.toggle(); }
       else if (e.code === 'Tab' || e.code === 'KeyW') { this.hud.toggleOverlay('weapons'); }
       else if (e.code === 'KeyE') { this.hud.toggleOverlay('items'); }
       else if (e.code === 'KeyQ') { g.cycleWeapon(-1); }
@@ -259,12 +308,16 @@ export class App {
     const g = this.game;
     if (g) {
       this.handleHeldKeys(dt);
-      const spectating = g.humansAlive().length === 0 && g.phase !== 'over';
-      if (spectating && !this.spectateEl) { this.spectateEl = S.spectateBar(this); this.stage.append(this.spectateEl); this.timeScale = 2.5; }
-      const n = Math.max(1, Math.round(this.timeScale));
-      for (let i = 0; i < n; i++) g.update(dt);
+      const spectating = g.phase !== 'over' && (g.online ? !(g.me && g.me.alive) : g.humansAlive().length === 0);
+      if (spectating && !this.spectateEl) { this.spectateEl = S.spectateBar(this, !!g.online); this.stage.append(this.spectateEl); if (!g.online) this.timeScale = 2.5; }
+      // Fixed timestep keeps the simulation deterministic across machines (required for online play).
+      this.acc += dt * (this.dev.flags.timeScale || 1) * this.timeScale;
+      let steps = 0;
+      while (this.acc >= STEP && steps < 8) { g.update(STEP); this.acc -= STEP; steps++; }
+      if (steps >= 8) this.acc = 0;
       this.renderer.drawGame(g, this.time, dt);
       this.hud.update(g);
+      this.dev.update(g, dt);
       if (g.phase === 'aim' && g.current && g.settings.turnTime > 0 && g.turnTimer < 5.5 && !g.current.locked) {
         const s = Math.ceil(g.turnTimer);
         if (s !== this.lastTick) { this.lastTick = s; this.audio.play('tick'); }

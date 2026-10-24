@@ -83,7 +83,10 @@ export class HUD {
     x.restore();
   }
 
-  show() { this.el.classList.remove('hidden'); this.last = {}; }
+  show() {
+    this.el.classList.remove('hidden'); this.last = {};
+    this.el.style.animation = 'none'; void this.el.offsetWidth; this.el.style.animation = '';
+  }
   hide() { this.el.classList.add('hidden'); this.closeOverlay(); }
 
   set(key, value, fn) { if (this.last[key] !== value) { this.last[key] = value; fn(value); } }
@@ -120,13 +123,15 @@ export class HUD {
     if (game.phase === 'fire') { fireState = 'busy'; fireText = 'INCOMING'; }
     else if (game.phase !== 'aim') { fireState = 'busy'; fireText = game.phase === 'over' ? 'GAME OVER' : 'WAIT'; }
     else if (!cur) { fireState = 'busy'; fireText = 'SPECTATING'; }
-    else if (cur.locked) { fireState = 'locked'; fireText = 'LOCKED IN'; }
+    else if (cur.locked) { fireState = 'locked'; fireText = game.online && game.lockInfo ? `LOCKED IN ${game.lockInfo.count}/${game.lockInfo.needed}` : 'LOCKED IN'; }
     else { fireState = 'ready'; fireText = 'FIRE'; }
+    if (game.phase === 'waiting') { fireState = 'busy'; fireText = 'SYNCING'; }
     this.set('fire', fireState + fireText, () => { const b = this.q('.hud-fire'); b.dataset.state = fireState; b.textContent = fireText; });
     this.set('mode', game.settings.mode, (m) => {
       this.q('.mode-name').textContent = m === 'team' ? 'TEAM BATTLE' : 'DEATHMATCH';
       this.q('.mode-desc').textContent = m === 'team' ? 'Eliminate the other teams' : 'Destroy your opponents';
     });
+    this.set('urgent', !!(cur && !cur.locked && game.phase === 'aim' && game.settings.turnTime > 0 && game.turnTimer < 6), (v) => { this.q('.hud-fire').classList.toggle('urgent', v); });
     this.set('angle', Math.round(t.angle), (v) => { this.q('.aim-angle').textContent = `${v}°`; });
     this.set('power', Math.round(t.power), (v) => { this.q('.aim-power').textContent = v; });
     this.set('canAct', !!(cur && !cur.locked && game.phase === 'aim'), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
@@ -191,10 +196,10 @@ export class HUD {
     this.page = Math.min(this.page, pages - 1);
     const slice = ids.slice(this.page * perPage, (this.page + 1) * perPage);
     const grid = el('div.wgrid');
-    for (const id of slice) {
+    slice.forEach((id, i) => {
       const w = getWeapon(id, t.tier(id));
       const ammo = t.ammo(id);
-      const tile = el('button.wtile', { class: `wtile${id === t.weaponId ? ' selected' : ''}${ammo <= 0 ? ' empty' : ''}`, title: w.fam.desc }, [
+      const tile = el('button.wtile', { class: `wtile${id === t.weaponId ? ' selected' : ''}${ammo <= 0 ? ' empty' : ''}`, title: w.fam.desc, style: { '--i': i } }, [
         el('img', { src: iconURL(w.icon, w.color, 40), alt: '' }),
         el('span.wname', { text: w.name }),
         el('span.wtier', { text: roman(w.tier) }),
@@ -202,7 +207,7 @@ export class HUD {
       ]);
       tile.addEventListener('click', () => { if (ammo > 0) { game.selectWeapon(id); this.closeOverlay(); } });
       grid.append(tile);
-    }
+    });
     this.overlay.innerHTML = '';
     const prev = el('button.pager.prev', { html: '&#9664;', disabled: this.page === 0, onclick: () => { this.page--; this.renderWeapons(game, t); } });
     const next = el('button.pager.next', { html: '&#9654;', disabled: this.page >= pages - 1, onclick: () => { this.page++; this.renderWeapons(game, t); } });

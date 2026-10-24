@@ -1,7 +1,11 @@
 // Central game configuration. Change the name here and it updates everywhere.
 export const GAME_NAME = 'Unnamed Tank Game';
 export const STUDIO = 'Qubiplex';
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
+
+// Default relay server for online play (a deployed worker/ URL, e.g. https://unnamed-tank-game-relay.<you>.workers.dev).
+// Players can override it in Settings; leave empty to hide online play until configured.
+export const ONLINE_SERVER = '';
 
 // The whole UI is designed at 1920x1080 and scaled to fit the window.
 export const DESIGN_W = 1920;

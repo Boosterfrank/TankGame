@@ -24,6 +24,14 @@ function logoEl(size = 120) {
   return el('img.logo', { src: 'assets/qubiplex-logo.webp', alt: STUDIO, style: { width: `${size}px`, height: `${size}px` } });
 }
 
+// Top-bar brand. Clicking the logo several times quickly opens the developer tools gate.
+export function brandEl(app) {
+  const logo = logoEl(40);
+  logo.classList.add('brand-logo');
+  logo.addEventListener('click', () => app.dev.logoClick());
+  return el('div.brand', {}, [logo, el('span', { text: GAME_NAME }), app.dev.unlocked ? el('button.mini.dev-btn', { text: 'DEV', onclick: () => app.dev.toggle() }) : null]);
+}
+
 export function titleScreen(app) {
   const s = el('div.screen.title-screen', {}, [
     el('div.title-inner', {}, [
@@ -55,13 +63,14 @@ export function profileBar(app) {
 
 export function menuScreen(app) {
   const s = el('div.screen.menu-screen', {}, [
-    el('div.topbar', {}, [el('div.brand', {}, [logoEl(40), el('span', { text: GAME_NAME })]), profileBar(app)]),
+    el('div.topbar', {}, [brandEl(app), profileBar(app)]),
     el('div.menu-body', {}, [
       el('div.menu-left', {}, [
         el('h1.hub-title', { html: GAME_NAME.split(' ').map((w) => `<span>${escapeHtml(w)}</span>`).join(' ') }),
-        el('div.menu-buttons', {}, [
+        el('div.menu-buttons', { style: { '--n': 6 } }, [
           el('button.btn.btn-primary.btn-big', { text: 'QUICK PLAY', onclick: () => app.quickPlay() }),
           el('button.btn.btn-big', { text: 'CUSTOM GAME', onclick: () => app.show('lobby') }),
+          el('button.btn.btn-big.btn-online', { html: 'PLAY ONLINE <small>beta</small>', onclick: () => app.show('online') }),
           el('button.btn.btn-big', { text: 'ARMORY', onclick: () => app.show('armory') }),
           el('button.btn.btn-big', { text: 'HOW TO PLAY', onclick: () => app.show('help') }),
           el('button.btn.btn-big', { text: 'SETTINGS', onclick: () => app.show('settings') }),
@@ -91,7 +100,7 @@ function tipCard() {
 }
 
 // ---------------------------------------------------------------- Lobby
-const SETTING_DEFS = [
+export const SETTING_DEFS = [
   { key: 'mode', label: 'Mode', values: [['deathmatch', 'Deathmatch'], ['team', 'Team Battle']] },
   { key: 'hp', label: 'HP', values: [[100, '100'], [150, '150'], [200, '200'], [300, '300']] },
   { key: 'wind', label: 'Wind', values: [['none', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['crazy', 'Crazy']] },
@@ -127,7 +136,7 @@ export function lobbyScreen(app) {
     const teamMode = L.settings.mode === 'team';
     const list = el('div.player-list');
     L.players.forEach((pl, i) => {
-      const row = el('div.player-row', { class: `player-row${pl.isBot ? ' bot' : ' human'}` });
+      const row = el('div.player-row', { class: `player-row${pl.isBot ? ' bot' : ' human'}`, style: { '--i': i } });
       row.append(el('div.pl-level', {}, [el('small', { text: pl.isBot ? 'BOT' : pl.isProfile ? 'YOU' : 'P' + (i + 1) }), el('b', { text: pl.isProfile ? app.profile.level : (pl.level || '-') })]));
       row.append(el('div.pl-avatar', { text: pl.name.slice(0, 2).toUpperCase() }));
       const nameWrap = el('div.pl-name');
@@ -207,7 +216,7 @@ export function lobbyScreen(app) {
       el('button.btn.wide', { text: 'BACK', onclick: () => app.show('menu') }),
     ]);
     s.append(
-      el('div.topbar', {}, [el('div.brand', {}, [logoEl(40), el('span', { text: GAME_NAME })]), profileBar(app)]),
+      el('div.topbar', {}, [brandEl(app), profileBar(app)]),
       el('div.lobby-body', {}, [
         el('div.lobby-left', {}, [
           el('h2.lobby-title', { text: `${app.profile.name}'s Game` }),
@@ -222,7 +231,7 @@ export function lobbyScreen(app) {
   return s;
 }
 
-function drawMiniTank(c, color) {
+export function drawMiniTank(c, color) {
   const x = c.getContext('2d');
   x.clearRect(0, 0, c.width, c.height);
   x.save(); x.translate(c.width / 2, c.height - 8); x.scale(1.2, 1.2);
@@ -252,20 +261,20 @@ export function armoryScreen(app) {
     const search = el('input.search', { type: 'search', placeholder: 'Search weapons…', value: query });
     search.addEventListener('input', () => { query = search.value.toLowerCase(); render(); s.querySelector('.search').focus(); });
     const grid = el('div.agrid');
-    for (const f of fams) {
+    fams.forEach((f, i) => {
       const isUnlocked = f.unlock <= p.level;
       const tier = weaponTier(p, f.id);
-      const tile = el('button.wtile.atile', { class: `wtile atile${selected === f.id ? ' selected' : ''}${isUnlocked ? '' : ' locked'}` }, [
+      const tile = el('button.wtile.atile', { class: `wtile atile${selected === f.id ? ' selected' : ''}${isUnlocked ? '' : ' locked'}`, style: { '--i': Math.min(i, 40) } }, [
         el('img', { src: iconURL(f.icon, isUnlocked ? f.color : '#37474f', 40), alt: '' }),
         el('span.wname', { text: f.name }),
         el('span.wtier', { text: isUnlocked ? roman(tier) : `LVL ${f.unlock}` }),
       ]);
       tile.addEventListener('click', () => { selected = f.id; render(); });
       grid.append(tile);
-    }
+    });
     const detail = armoryDetail(app, selected, render);
     s.append(
-      el('div.topbar', {}, [el('div.brand', {}, [logoEl(40), el('span', { text: GAME_NAME })]), profileBar(app)]),
+      el('div.topbar', {}, [brandEl(app), profileBar(app)]),
       el('div.armory-body', {}, [
         el('div.armory-left', {}, [
           el('div.armory-head', {}, [el('h2', { text: 'ARMORY' }), el('span.muted', { text: `${unlocked.length} / ${FAMILIES.length} families unlocked · ${TOTAL_WEAPONS} weapons` }), search]),
@@ -330,7 +339,7 @@ export function helpScreen(app) {
     ['Mouse wheel', 'Fine power'], ['Esc', 'Close panel / leave game'],
   ];
   return el('div.screen.help-screen', {}, [
-    el('div.topbar', {}, [el('div.brand', {}, [logoEl(40), el('span', { text: GAME_NAME })]), profileBar(app)]),
+    el('div.topbar', {}, [brandEl(app), profileBar(app)]),
     el('div.help-body', {}, [
       el('div.card', {}, [el('h3', { text: 'HOW IT WORKS' }), el('ul', {}, [
         'Everyone aims at the same time. When the timer ends or you press FIRE, every shot launches at once.',
@@ -352,23 +361,26 @@ export function settingsScreen(app) {
   const name = el('input', { type: 'text', value: p.name, maxlength: 14 });
   const sound = el('input', { type: 'checkbox', checked: p.settings.sound });
   const vol = el('input', { type: 'range', min: 0, max: 1, step: 0.05, value: p.settings.volume });
+  const server = el('input.server-input', { type: 'text', value: p.settings.server || '', placeholder: 'https://your-relay.workers.dev', spellcheck: false });
   const save = () => {
     p.name = name.value.trim() || 'Commander';
     p.settings.sound = sound.checked; p.settings.volume = +vol.value;
+    p.settings.server = server.value.trim().replace(/\/+$/, '');
     app.applyAudioSettings();
     saveProfile(p);
     if (app.lobby) { const me = app.lobby.players.find((x) => x.isProfile); if (me) me.name = p.name; }
   };
-  for (const i of [name, sound, vol]) i.addEventListener('change', save);
+  for (const i of [name, sound, vol, server]) i.addEventListener('change', save);
   vol.addEventListener('input', () => { p.settings.volume = +vol.value; app.applyAudioSettings(); });
   return el('div.screen.settings-screen', {}, [
-    el('div.topbar', {}, [el('div.brand', {}, [logoEl(40), el('span', { text: GAME_NAME })]), profileBar(app)]),
+    el('div.topbar', {}, [brandEl(app), profileBar(app)]),
     el('div.settings-body', {}, [
       el('div.card', {}, [
         el('h3', { text: 'SETTINGS' }),
         el('label.srow', {}, [el('span', { text: 'Commander name' }), name]),
         el('label.srow', {}, [el('span', { text: 'Sound effects' }), sound]),
         el('label.srow', {}, [el('span', { text: 'Volume' }), vol]),
+        el('label.srow', {}, [el('span', { text: 'Online relay server' }), server]),
         el('div.srow', {}, [el('span', { text: 'Progress' }), el('button.btn.btn-danger.btn-small', { text: 'RESET PROFILE', onclick: () => app.confirm('Erase all progress, levels and unlocks?', () => { app.profile = resetProfile(); app.lobby = null; app.show('settings'); }) })]),
         el('p.muted', { text: 'Progress is stored in this browser (localStorage).' }),
       ]),
@@ -381,7 +393,7 @@ export function settingsScreen(app) {
 export function resultsScreen(app, results, summary) {
   const me = results.find((r) => r.tank.isProfile);
   const won = !!me?.winner;
-  const rows = results.map((r) => el('div.rrow', { class: `rrow${r.tank.isProfile ? ' me' : ''}${r.winner ? ' winner' : ''}` }, [
+  const rows = results.map((r, i) => el('div.rrow', { class: `rrow${r.tank.isProfile ? ' me' : ''}${r.winner ? ' winner' : ''}`, style: { '--i': i } }, [
     el('b.rank', { text: `#${r.rank}` }),
     el('span.rname', { text: r.name + (r.tank.isBot ? '' : r.tank.isProfile ? ' (you)' : ' (local)') }),
     el('span', { text: r.alive ? `${r.hp} HP` : 'destroyed' }),
@@ -407,16 +419,23 @@ export function resultsScreen(app, results, summary) {
     const need = xpForLevel(app.profile.level);
     sumBox.append(el('div.pb-xp.big', {}, [el('div.pb-xp-fill', { style: { width: `${Math.min(100, (app.profile.xp / need) * 100)}%` } }), el('span', { text: `Level ${app.profile.level} · ${fmt(app.profile.xp)} / ${fmt(need)} XP` })]));
   }
+  const confetti = won ? el('div.confetti', {}, Array.from({ length: 70 }, (_, i) => el('i', { style: { left: `${Math.random() * 100}%`, background: ['#ffd740', '#4cff5e', '#4fc3ff', '#ff4b4b', '#e040fb', '#fff'][i % 6], animationDelay: `${Math.random() * 2.5}s`, animationDuration: `${3 + Math.random() * 2.5}s`, transform: `rotate(${Math.random() * 360}deg)` } }))) : null;
   return el('div.screen.results-screen', {}, [
+    confetti,
     el('div.results-inner', {}, [
       el('h1', { class: `result-title ${won ? 'win' : 'lose'}`, text: me ? (won ? 'VICTORY' : me.alive ? 'DRAW' : 'DEFEATED') : 'GAME OVER' }),
       el('div.muted.big', { text: results.find((r) => r.winner) ? `${results.filter((r) => r.winner).map((r) => r.name).join(' & ')} ${results.filter((r) => r.winner).length > 1 ? 'win' : 'wins'} the battle` : 'No survivors' }),
       el('div.results-cols', {}, [el('div.card.standings', {}, [el('h3', { text: 'STANDINGS' }), ...rows]), sumBox]),
-      el('div.results-buttons', {}, [
-        el('button.btn.btn-primary.btn-big', { text: 'REMATCH', onclick: () => app.rematch() }),
-        el('button.btn.btn-big', { text: 'LOBBY', onclick: () => app.show('lobby') }),
-        el('button.btn.btn-big', { text: 'MAIN MENU', onclick: () => app.show('menu') }),
-      ]),
+      app.session
+        ? el('div.results-buttons', {}, [
+          el('button.btn.btn-primary.btn-big', { text: 'BACK TO ROOM', onclick: () => { if (app.session.isHost) app.session.backToLobby(); app.show('onlineLobby'); } }),
+          el('button.btn.btn-big', { text: 'LEAVE', onclick: () => { app.session.leave(); app.session = null; app.show('menu'); } }),
+        ])
+        : el('div.results-buttons', {}, [
+          el('button.btn.btn-primary.btn-big', { text: 'REMATCH', onclick: () => app.rematch() }),
+          el('button.btn.btn-big', { text: 'LOBBY', onclick: () => app.show('lobby') }),
+          el('button.btn.btn-big', { text: 'MAIN MENU', onclick: () => app.show('menu') }),
+        ]),
     ]),
   ]);
 }
@@ -440,9 +459,9 @@ export function confirmModal(text, onYes, onNo) {
   ]);
 }
 
-export function spectateBar(app) {
+export function spectateBar(app, online = false) {
   return el('div.spectate-bar', {}, [
-    el('span', { text: 'You were destroyed. Spectating the bots…' }),
-    el('button.btn.btn-small', { text: 'SKIP TO RESULTS', onclick: () => app.skipToEnd() }),
+    el('span', { text: online ? 'You were destroyed. Spectating until the battle ends…' : 'You were destroyed. Spectating the bots…' }),
+    online ? null : el('button.btn.btn-small', { text: 'SKIP TO RESULTS', onclick: () => app.skipToEnd() }),
   ]);
 }

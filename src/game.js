@@ -15,8 +15,12 @@ const WIND_MAX = { none: 0, low: 3, medium: 6, high: 9, crazy: 12 };
 const SUDDEN_DEATH_ROUND = 30;
 
 export class Game {
-  constructor({ settings, players, seed, audio }) {
+  constructor({ settings, players, seed, audio, online = null, deadline = null }) {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
+    this.online = online;              // OnlineSession when playing over the relay
+    this.deadlineAt = deadline;        // server deadline (ms epoch) for the current aim phase
+    this.lockInfo = null;              // { count, needed } from the relay
+    this.dev = null;                   // developer-tools flags (see ui/devtools.js)
     this.seed = seed ?? (Math.random() * 2 ** 31) | 0;
     this.rng = new RNG(this.seed);
     this.audio = audio;
@@ -49,6 +53,7 @@ export class Game {
     this.winners = null;
     this.playerDefs = players;
     this._setup(players);
+    if (this.online) this.online.bind(this);
   }
 
   _setup(players) {
@@ -56,8 +61,10 @@ export class Game {
     const cols = spawnColumns(players.length, WORLD_W, this.rng);
     players.forEach((def, i) => {
       const t = new Tank({ ...def, hp: this.settings.hp, team: this.settings.mode === 'team' ? def.team : 100 + i });
+      t.netId = def.netId || null;
       t.x = cols[i];
-      t.y = this.terrain.surfaceY(t.x, 0);
+      t.y = this.terrain.surfaceY(t.x, 0) - 190; // tanks drop in during the intro
+      t.onGround = false;
       t.angle = t.x > WORLD_W / 2 ? 120 : 60;
       if (t.isBot) botArsenal(t, def.level || 10, this.settings.arsenal === 'all');
       else {
@@ -66,10 +73,14 @@ export class Game {
         this.humans++;
       }
       if (this.settings.items) for (const it of ITEMS) t.items[it.id] = 1;
+      if (this.settings.dummies && t.isBot) t.dummy = true; // dev test range: bots never fire
       this.tanks.push(t);
     });
     this.rollWind();
   }
+
+  tankByNet(id) { return this.tanks.find((t) => t.netId === id) || null; }
+  get me() { return this.tanks.find((t) => t.isProfile) || null; }
 
   // ------------------------------------------------------------ helpers
   get viewer() {
@@ -109,14 +120,101 @@ export class Game {
   // ------------------------------------------------------------ phases
   beginAim() {
     this.phase = 'aim';
-    for (const t of this.tanks) { t.locked = false; t.shot = null; }
-    this.botsToPlan = this.tanks.filter((t) => t.isBot && t.alive);
+    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; }
+    this.lockInfo = null;
+    const o = this.online;
+    this.botsToPlan = (o && !o.isHost) || this.settings.dummies ? [] : this.tanks.filter((t) => t.isBot && t.alive);
+    this.waitingPass = false;
+    if (o) {
+      const me = this.me;
+      this.current = me && me.alive ? me : null;
+      this.turnTimer = this.deadlineAt ? Math.max(0.5, (this.deadlineAt - Date.now()) / 1000) : this.settings.turnTime;
+      if (!this.current) { this.planNextBot(true); this.on.lock?.(this.buildLockPayload(null)); }
+      this.on.phase?.('aim');
+      return;
+    }
     const humans = this.humansAlive();
     this.current = humans[0] || null;
     this.turnTimer = this.settings.turnTime;
-    this.waitingPass = false;
     if (this.current && this.humans > 1) { this.waitingPass = true; this.on.pass?.(this.current); }
     this.on.phase?.('aim');
+  }
+
+  buildLockPayload(t) {
+    const payload = { x: t ? Math.round(t.x) : 0, shot: t ? t.shot : null, items: t ? (t.roundItems || []).slice() : [], dead: !t };
+    if (this.online?.isHost) {
+      payload.bots = {};
+      this.tanks.forEach((b, i) => { if (b.isBot && b.alive && b.shot) payload.bots[i] = { shot: b.shot, items: (b.roundItems || []).slice() }; });
+    }
+    return payload;
+  }
+
+  // Server says: new aim phase. Non-hosts snap to the host's end-of-volley snapshot first.
+  serverAim(msg) {
+    if (this.phase === 'over') return;
+    if (this.phase === 'fire') { this.projectiles.length = 0; this.spawnQueue.length = 0; this.skyLasers.length = 0; this.phase = 'waiting'; }
+    if (this.phase === 'intro') { this.introT = 0; this.round = 1; this.beginAim(); }
+    if (msg.snapshot && !this.online.isHost) this.applySnapshot(msg.snapshot);
+    this.deadlineAt = msg.deadline || null;
+    this.round = (msg.round || this.round + 1) - 1;
+    this.nextRound();
+  }
+
+  // Server says: everyone has locked in. Apply positions, items and shots, then fire together.
+  applyVolley(msg) {
+    const o = this.online;
+    if (!o || this.phase === 'over') return;
+    if (this.phase === 'intro') { this.introT = 0; this.round = 1; this.beginAim(); }
+    if (this.phase !== 'aim') return;
+    for (const t of this.tanks) { t.shot = null; t.locked = false; }
+    for (const e of msg.entries || []) {
+      const t = this.tankByNet(e.id);
+      if (!t) continue;
+      const mine = e.id === o.myId;
+      if (t.alive && !e.dead) {
+        if (!mine) {
+          t.x = clamp(Math.round(e.x || t.x), 10, WORLD_W - 10);
+          t.y = this.terrain.surfaceY(t.x, Math.max(0, t.y - 60));
+          t.settle(this.terrain, 1 / 60);
+          for (const it of e.items || []) this.useItem(it.id, t, it.payload, true);
+        }
+        t.shot = e.shot || null; t.locked = true;
+        if (e.shot) { t.angle = e.shot.angle; t.power = e.shot.power; }
+      }
+      if (e.bots) {
+        for (const [i, b] of Object.entries(e.bots)) {
+          const bt = this.tanks[+i];
+          if (!bt || !bt.isBot || !bt.alive) continue;
+          if (!mine) for (const it of b.items || []) this.useItem(it.id, bt, it.payload, true);
+          bt.shot = b.shot || null; bt.locked = true;
+          if (b.shot) { bt.angle = b.shot.angle; bt.power = b.shot.power; }
+        }
+      }
+    }
+    for (const id of msg.left || []) { const t = this.tankByNet(id); if (t && t.alive) { t.connected = false; this.killTank(t, null); } }
+    this.checkCratePickups();
+    this.beginFire();
+  }
+
+  setRemoteX(id, x) {
+    const t = this.tankByNet(id);
+    if (!t || !t.alive || this.phase !== 'aim') return;
+    t.x = clamp(Math.round(x), 10, WORLD_W - 10);
+    t.y = this.terrain.surfaceY(t.x, Math.max(0, t.y - 60));
+  }
+
+  snapshot() {
+    return { tanks: this.tanks.map((t) => ({ hp: Math.round(t.hp), armor: Math.round(t.armor), x: Math.round(t.x), y: Math.round(t.y), alive: t.alive, fuel: Math.round(t.fuel) })) };
+  }
+
+  applySnapshot(snap) {
+    (snap.tanks || []).forEach((d, i) => {
+      const t = this.tanks[i];
+      if (!t) return;
+      if (t.alive && !d.alive) this.killTank(t, null);
+      t.hp = d.hp; t.armor = d.armor; t.fuel = d.fuel;
+      if (Math.abs(t.x - d.x) > 2 || Math.abs(t.y - d.y) > 6) { t.x = d.x; t.y = d.y; }
+    });
   }
 
   confirmPass() { this.waitingPass = false; }
@@ -140,6 +238,7 @@ export class Game {
     t.shot = { weaponId: w.id, angle: t.angle, power: t.power };
     t.locked = true;
     this.audio.play('lock');
+    if (this.online) { this.planNextBot(true); this.on.lock?.(this.buildLockPayload(t)); return; }
     this.advanceAim();
   }
 
@@ -164,7 +263,7 @@ export class Game {
     this.volleyT = 0; this.settleT = 0;
     this.launchQueue = [];
     for (const t of this.tanks) {
-      if (!t.alive || !t.shot) continue;
+      if (!t.alive || !t.shot || t.dummy) continue;
       this.launchQueue.push({ tank: t, shot: t.shot, at: this.rng.range(0, 0.7) });
     }
     this.launchQueue.sort((a, b) => a.at - b.at);
@@ -198,7 +297,14 @@ export class Game {
 
   endVolley() {
     this.markers.length = 0;
-    if (this.aliveTeams().length <= 1) { this.finish(); return; }
+    const over = this.aliveTeams().length <= 1;
+    if (this.online) {
+      this.phase = 'waiting';
+      this.on.volleyDone?.(this.round, this.online.isHost ? this.snapshot() : null, over);
+      if (over) this.finish();
+      return;
+    }
+    if (over) { this.finish(); return; }
     this.phase = 'roundend';
     this.roundEndT = 0.5;
   }
@@ -253,16 +359,26 @@ export class Game {
         break;
       case 'aim':
         if (this.waitingPass) break;
+        if (this.online) {
+          if (this.current && !this.current.locked && this.deadlineAt && !this.dev?.noTimer) {
+            this.turnTimer = (this.deadlineAt - Date.now()) / 1000;
+            if (this.turnTimer <= 0) { this.turnTimer = 0; this.fire(); }
+          }
+          this.planNextBot();
+          break;
+        }
         if (!this.current) { // nobody human left: bots play on
           this.spectateT = (this.spectateT || 0) + dt;
           if (this.spectateT > 0.6) { this.spectateT = 0; this.planNextBot(true); this.beginFire(); }
           break;
         }
-        if (this.settings.turnTime > 0) {
+        if (this.settings.turnTime > 0 && !this.dev?.noTimer) {
           this.turnTimer -= dt;
           if (this.turnTimer <= 0) { this.turnTimer = 0; this.fire(); }
         }
         this.planNextBot();
+        break;
+      case 'waiting':
         break;
       case 'fire':
         this.updateVolley(dt);
@@ -299,7 +415,11 @@ export class Game {
   moveCurrent(dir, dt) {
     const t = this.current;
     if (!t || t.locked || this.phase !== 'aim' || this.waitingPass) return;
-    if (t.move(dir, dt, this.terrain)) this.audio.engine(true);
+    if (t.move(dir, dt, this.terrain)) {
+      this.audio.engine(true);
+      if (this.online) this.on.move?.(t.x);
+      if (Math.random() < 0.5) this.fx.emit(t.x - dir * 14, t.y - 2, -dir * (20 + Math.random() * 40), -20 - Math.random() * 30, 0.5, '#9fd8ff', 2 + Math.random() * 2, { smoke: true, g: -0.1, grow: 6 });
+    }
   }
   selectWeapon(id) {
     const t = this.current;
@@ -314,26 +434,36 @@ export class Game {
     this.audio.play('click');
   }
 
-  useItem(id, tank = this.current) {
+  // Items are applied immediately; online, the payload (random choices) is replayed on other clients.
+  useItem(id, tank = this.current, payload = null, replay = false) {
     if (!tank || !tank.alive || !(tank.items[id] > 0)) return false;
-    if (tank === this.current && (tank.locked || this.phase !== 'aim')) return false;
+    if (!replay && tank === this.current && (tank.locked || this.phase !== 'aim')) return false;
+    payload = payload || {};
     switch (id) {
       case 'heal': { const h = tank.heal(40); this.fx.explosion(tank.x, tank.cy, 40, '#69f0ae', { heal: true }); this.fx.text(tank.x, tank.cy - 34, `+${h}`, '#69f0ae'); break; }
       case 'shield': tank.armor = Math.min(100, tank.armor + PHYS.maxArmor); this.fx.rings.push({ x: tank.x, y: tank.cy, r0: 10, r1: 40, life: 0.6, max: 0.6, color: '#4fc3ff', w: 4 }); break;
       case 'teleport': {
-        let x = 60, tries = 0;
-        do { x = this.rng.int(60, WORLD_W - 60); tries++; } while (tries < 30 && this.tanks.some((o) => o !== tank && o.alive && Math.abs(o.x - x) < 90));
-        this.teleportTank(tank, x, 0); break;
+        if (payload.x == null) {
+          let x = 60, tries = 0;
+          do { x = 60 + Math.floor(Math.random() * (WORLD_W - 120)); tries++; } while (tries < 30 && this.tanks.some((o) => o !== tank && o.alive && Math.abs(o.x - x) < 90));
+          payload.x = x;
+        }
+        this.teleportTank(tank, payload.x, 0); break;
       }
       case 'double': tank.doubleDamage = true; break;
       case 'fuel': tank.fuel = PHYS.maxFuel; break;
       case 'ammo': {
-        const ids = [...tank.arsenal.keys()].filter((k) => tank.arsenal.get(k) !== Infinity);
-        for (let i = 0; i < 3 && ids.length; i++) { const k = ids.splice(this.rng.int(0, ids.length - 1), 1)[0]; tank.addAmmo(k, 1); }
+        if (!payload.ids) {
+          const ids = [...tank.arsenal.keys()].filter((k) => tank.arsenal.get(k) !== Infinity);
+          payload.ids = [];
+          for (let i = 0; i < 3 && ids.length; i++) payload.ids.push(ids.splice(Math.floor(Math.random() * ids.length), 1)[0]);
+        }
+        for (const k of payload.ids) tank.addAmmo(k, 1);
         break;
       }
     }
     tank.items[id]--;
+    if (this.online && !replay) (tank.roundItems = tank.roundItems || []).push({ id, payload });
     this.audio.play('item');
     const it = ITEMS.find((i) => i.id === id);
     this.message(`${tank.name} used ${it?.name || id}`, '#ffd740');
@@ -353,7 +483,7 @@ export class Game {
   launch(tank, shot) {
     const w = getWeapon(shot.weaponId, tank.tier(shot.weaponId));
     if (!w) return;
-    if (tank.ammo(w.id) !== Infinity) tank.arsenal.set(w.id, Math.max(0, tank.ammo(w.id) - 1));
+    if (tank.ammo(w.id) !== Infinity && !(this.dev?.infAmmo && tank.isProfile)) tank.arsenal.set(w.id, Math.max(0, tank.ammo(w.id) - 1));
     const dmgMul = tank.doubleDamage ? 2 : 1;
     tank.doubleDamage = false;
     tank.stats.shots++;
@@ -365,7 +495,7 @@ export class Game {
       const angle = shot.angle + frac * (f.spread || 0);
       let speedMul = 1;
       if (f.speedSteps) speedMul *= 1 - f.speedSteps * (n > 1 ? i / (n - 1) : 0);
-      if (f.speedVar) speedMul *= 1 + (Math.random() - 0.5) * 2 * f.speedVar;
+      if (f.speedVar) speedMul *= 1 + (this.rng.next() - 0.5) * 2 * f.speedVar;
       const spec = f.colors ? { ...w.spec, color: f.colors[i % f.colors.length] } : w.spec;
       const make = () => {
         if (!tank.alive) return;
@@ -493,6 +623,7 @@ export class Game {
 
   applyDamage(t, amount, owner, famId, environmental = false, pierce = false) {
     if (!t.alive || amount <= 0) return 0;
+    if (this.dev?.god && t.isProfile) { this.fx.text(t.x, t.cy - 34, 'GOD', '#ffd740'); return 0; }
     const dealt = t.takeDamage(amount, pierce);
     const hostile = owner && owner !== t && owner.team !== t.team;
     this.fx.text(t.x, t.cy - 34, `-${Math.round(dealt)}`, hostile || environmental ? '#ff5252' : '#ffab40', 22 + Math.min(14, dealt / 5));
@@ -525,7 +656,10 @@ export class Game {
     this.audio.play('death');
     if (killer && killer !== t) { killer.stats.kills++; killer.xp += 40; this.message(`${killer.name} destroyed ${t.name}!`, '#ff5252'); }
     else this.message(`${t.name} was destroyed`, '#ff5252');
-    if (t === this.current) { this.current = null; this.advanceAim(); }
+    if (!this.headless) {
+      for (let i = 0; i < 7; i++) this.fx.emit(t.x, t.cy, (Math.random() - 0.5) * 320, -120 - Math.random() * 260, 1.2 + Math.random(), i % 2 ? '#37474f' : '#546e7a', 3 + Math.random() * 3, { g: 1.3, drag: 0.4 });
+    }
+    if (t === this.current) { this.current = null; if (!this.online) this.advanceAim(); }
   }
 
   spawnChildren(parent, sp, x = parent.x, y = parent.y) {
@@ -539,16 +673,17 @@ export class Game {
       for (let i = 0; i < n; i++) {
         const frac = n > 1 ? i / (n - 1) - 0.5 : 0;
         let cx = x, cy = y, vx = 0, vy = 0, ang;
-        let speed = (sp.speed || 0) * (1 + (sp.speedVar ? (Math.random() - 0.5) * 2 * sp.speedVar : 0));
+        const rng = this.rng;
+        let speed = (sp.speed || 0) * (1 + (sp.speedVar ? (rng.next() - 0.5) * 2 * sp.speedVar : 0));
         let sticky;
         switch (sp.pattern) {
           case 'fan': ang = pdir + rad((sp.tilt || 0) * fwd) + rad(sp.spread || 0) * frac; break;
           case 'up': ang = -Math.PI / 2 + rad(sp.spread || 0) * frac; break;
           case 'down': ang = Math.PI / 2 + rad(sp.spread || 0) * frac; break;
           case 'ring': ang = (i / n) * Math.PI * 2 - Math.PI / 2; break;
-          case 'random': ang = Math.random() * Math.PI * 2; speed *= 0.5 + Math.random() * 0.5; break;
+          case 'random': ang = rng.next() * Math.PI * 2; speed *= 0.5 + rng.next() * 0.5; break;
           case 'v': ang = pdir + rad(sp.spread || 0) * frac; speed *= 1 + Math.abs(frac) * 0.8; break;
-          case 'rain': cx = x + (sp.spread || 0) * frac + (Math.random() - 0.5) * 24; cy = Math.max(-30, y - 440); vy = speed; break;
+          case 'rain': cx = x + (sp.spread || 0) * frac + (rng.next() - 0.5) * 24; cy = Math.max(-30, y - 440); vy = speed; break;
           case 'line': cx = x + (sp.spread || 0) * frac; vy = speed; break;
           case 'ground': cx = clamp(x + (sp.spread || 0) * frac, 4, WORLD_W - 4); cy = T.surfaceY(cx, Math.max(0, y - 90)) - 3; sticky = (sp.stagger || 0) * i + 0.02; break;
           case 'groundfwd': cx = clamp(x + fwd * (sp.spread || 0) * (i + 1), 4, WORLD_W - 4); cy = T.surfaceY(cx, Math.max(0, y - 90)) - 3; sticky = (sp.stagger || 0) * (i + 1) + 0.02; break;
@@ -577,10 +712,13 @@ export class Game {
   }
 
   // ------------------------------------------------------------ crates
-  spawnCrate() {
-    const x = this.rng.int(90, WORLD_W - 90);
-    const type = this.rng.chance(0.7) ? 'weapon' : 'health';
-    this.crates.push({ x, y: -30, vy: 0, type, landed: false, t: 0 });
+  // Crates land instantly in the simulation (the parachute descent is purely visual) so that
+  // lockstep clients agree on where they are.
+  spawnCrate(atX = null, type = null) {
+    const x = atX ?? this.rng.int(90, WORLD_W - 90);
+    type = type || (this.rng.chance(0.7) ? 'weapon' : 'health');
+    const y = this.terrain.surfaceY(x, 0) - 12;
+    this.crates.push({ x, y, vy: 0, type, landed: true, drop: 0, t: 0 });
     this.message(type === 'weapon' ? 'Supply drop incoming!' : 'Repair crate incoming!', '#ffd740');
   }
 
@@ -588,12 +726,20 @@ export class Game {
     for (let i = this.crates.length - 1; i >= 0; i--) {
       const c = this.crates[i];
       c.t += dt;
+      c.drop = Math.min(1, c.drop + dt / 1.8);
       if (!c.landed) {
-        c.y += (c.chuteless ? (c.vy += 500 * dt) : 75) * dt;
-        c.x += this.wind * 1.5 * dt;
-        if (this.terrain.solid(c.x, c.y + 12)) { c.landed = true; c.chuteless = false; c.vy = 0; const air = this.terrain.airAbove(c.x, c.y + 12, 40); if (air >= 0) c.y = air - 12; }
+        c.vy += 500 * dt; c.y += c.vy * dt;
+        if (this.terrain.solid(c.x, c.y + 12)) { c.landed = true; c.vy = 0; const air = this.terrain.airAbove(c.x, c.y + 12, 40); if (air >= 0) c.y = air - 12; }
         if (c.y > WORLD_H + 40) { this.crates.splice(i, 1); continue; }
-      } else if (!this.terrain.solid(c.x, c.y + 14)) { c.landed = false; c.chuteless = true; c.vy = 0; }
+      } else if (!this.terrain.solid(c.x, c.y + 14)) { c.landed = false; c.vy = 0; }
+    }
+    if (!(this.online && this.phase === 'aim')) this.checkCratePickups();
+  }
+
+  checkCratePickups() {
+    for (let i = this.crates.length - 1; i >= 0; i--) {
+      const c = this.crates[i];
+      if (!this.online && c.drop < 1) continue;
       for (const t of this.tanks) {
         if (!t.alive) continue;
         if (Math.abs(t.x - c.x) < 28 && Math.abs(t.cy - c.y) < 34) { this.grabCrate(t, c); this.crates.splice(i, 1); break; }

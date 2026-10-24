@@ -405,3 +405,20 @@ button.pl-ready:not(.not) { animation: pop 0.35s ease-out both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ======================================================================
+   Boot screen, now-playing chip, music-reactive title
+   ====================================================================== */
+.boot-screen { align-items: center; justify-content: center; cursor: pointer; background: radial-gradient(ellipse at center, rgba(10,30,60,0.25), rgba(0,0,0,0.55)); }
+.boot-inner { display: flex; flex-direction: column; align-items: center; gap: 26px; animation: fadeUp 0.9s ease-out; }
+.boot-tank { filter: drop-shadow(0 0 14px rgba(76,255,94,0.5)); animation: logoFloat 3.5s ease-in-out infinite; }
+.boot-hint { color: var(--muted); letter-spacing: 0.16em; font-size: 15px; text-transform: uppercase; }
+#nowplaying { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 6px 10px 6px 14px; background: rgba(10,14,20,0.78); border: 1px solid var(--line); border-radius: 4px; z-index: 12; font-size: 16px; letter-spacing: 0.06em; animation: fadeIn 0.4s ease-out both; }
+#nowplaying .np-icon { color: var(--cyan); font-size: 18px; }
+#nowplaying .np-title { font-weight: 700; }
+#nowplaying .eq { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
+#nowplaying .eq i { display: block; width: 4px; height: 4px; background: var(--cyan); border-radius: 1px; box-shadow: 0 0 6px rgba(57,208,255,0.7); transition: height 0.07s linear; }
+.profile-bar .avatar.secret { cursor: pointer; }
+.menu-screen { background: linear-gradient(90deg, rgba(5,8,13,0.74), rgba(5,8,13,0.18)); }
+.hub-title { animation: none; text-shadow: 0 0 calc(24px + var(--bass, 0) * 70px) rgba(57,208,255, calc(0.45 + var(--bass, 0) * 0.55)), 0 5px 0 #0b3b5a, 0 10px 24px rgba(0,0,0,0.8); }
+.hub-title span:nth-child(2) { color: var(--cyan); filter: brightness(calc(1 + var(--bass, 0) * 0.6)); }

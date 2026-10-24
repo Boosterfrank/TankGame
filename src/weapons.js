@@ -98,8 +98,9 @@ add({ id: 'digger', name: 'Digger', cat: 'dig', unlock: 6, ammo: 1, icon: 'dig',
 add({ id: 'penta', name: 'Penta Shot', cat: 'multi', unlock: 7, ammo: 1, icon: 'balls5', color: '#1e88e5',
   desc: 'Five shells in a fan.', fire: { n: 5, spread: 14 }, spec: { boom: B(24, 15) } });
 add({ id: 'rain', name: 'Rain', cat: 'air', unlock: 7, ammo: 1, icon: 'rain', color: '#039be5',
-  desc: 'Calls a shower of shells down from the sky at the apex.',
-  spec: { apex: { n: 8, pattern: 'rain', spread: 200, speed: 300, spec: { r: 3, color: '#90caf9', boom: B(18, 11) } } } });
+  desc: 'A flare that skips to a stop, then calls a shower of shells down where it rests.',
+  spec: { r: 3, color: '#90caf9', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(12, 4),
+    sky: { n: 8, pattern: 'rain', spread: 200, speed: 300, delay: 0.3, spec: { r: 3, color: '#90caf9', boom: B(18, 11) } } } });
 add({ id: 'hover', name: 'Hover-Ball', cat: 'bounce', unlock: 7, ammo: 1, icon: 'bubble', color: '#26c6da',
   desc: 'Floaty and bouncy. Drifts far on the wind.', spec: { g: 0.35, bounce: { n: 5, k: 0.8 }, color: '#80deea', boom: B(28, 18) } });
 add({ id: 'sparkplug', name: 'Spark Plug', cat: 'cluster', unlock: 7, ammo: 1, icon: 'sparkle', color: '#fdd835',
@@ -157,8 +158,8 @@ add({ id: 'crackler', name: 'Crackler', cat: 'quirky', unlock: 13, ammo: 1, icon
   desc: 'Drops a trail of mini bombs along its whole flight.',
   spec: { boom: B(24, 16), timed: { t: 0.15, repeat: 8, n: 1, pattern: 'down', speed: 60, spec: { r: 2.5, color: '#ffcc80', boom: B(16, 9) } } } });
 add({ id: 'airstrike', name: 'Airstrike', cat: 'air', unlock: 13, ammo: 1, icon: 'rain', color: '#0288d1',
-  desc: 'Marks the target for five bombs from above.',
-  spec: { boom: B(20, 10), sky: { n: 5, pattern: 'rain', spread: 160, speed: 380, spec: { r: 4, boom: B(28, 18) } } } });
+  desc: 'A marker flare bounces to a stop and calls in five bombs from above.',
+  spec: { r: 3.5, color: '#ffab40', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(14, 6), sky: { n: 5, pattern: 'rain', spread: 160, speed: 380, delay: 0.35, spec: { r: 4, boom: B(28, 18) } } } });
 add({ id: 'sine', name: 'Sine Wave', cat: 'jet', unlock: 13, ammo: 1, icon: 'wave', color: '#26a69a',
   desc: 'Undulates through the air. Hard to predict, harder to dodge.', spec: { wave: { amp: 55, freq: 4 }, color: '#80cbc4', boom: B(28, 22) } });
 add({ id: 'plasma', name: 'Plasma Bolt', cat: 'basic', unlock: 14, ammo: 1, icon: 'needle', color: '#7e57c2',
@@ -196,8 +197,8 @@ add({ id: 'minigun', name: 'Minigun', cat: 'multi', unlock: 17, ammo: 1, icon: '
 add({ id: 'mountain', name: 'Mountain Builder', cat: 'terrain', unlock: 17, ammo: 1, icon: 'mountain', color: '#5d4037',
   desc: 'Raises a mountain. Great for cover or entombing a rival.', spec: { dirt: true, color: '#a1887f', boom: B(110, 0) } });
 add({ id: 'saltpepper', name: 'Salt and Pepper', cat: 'air', unlock: 17, ammo: 1, icon: 'rain', color: '#9e9e9e',
-  desc: 'Seasons the target with a sprinkling from above.',
-  spec: { boom: B(20, 10), sky: { n: 10, pattern: 'rain', spread: 240, speed: 420, spec: { r: 2.5, colors: ['#ffffff', '#424242'], boom: B(16, 9) } } } });
+  desc: 'A flare lands, and the target gets seasoned from above.',
+  spec: { r: 3, color: '#eeeeee', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(12, 4), sky: { n: 10, pattern: 'rain', spread: 240, speed: 420, delay: 0.3, spec: { r: 2.5, colors: ['#ffffff', '#424242'], boom: B(16, 9) } } } });
 add({ id: 'magic', name: 'Magic Shower', cat: 'cluster', unlock: 18, ammo: 1, icon: 'sparkle', color: '#ba68c8',
   desc: 'Fourteen sparkles shimmer down from the apex.',
   spec: { trail: 'spark', apex: { n: 14, pattern: 'fan', spread: 150, speed: 180, speedVar: 0.5, spec: { r: 2.5, trail: 'spark', color: '#e1bee7', boom: B(14, 8) } } } });
@@ -235,8 +236,9 @@ add({ id: 'octagon', name: 'Octagon', cat: 'cluster', unlock: 21, ammo: 1, icon:
 add({ id: 'backgroller', name: 'Back-Groller', cat: 'bounce', unlock: 21, ammo: 1, icon: 'roll', color: '#827717',
   desc: 'Lands, then rolls back the way it came.', spec: { roll: { dur: 3.5, speed: 200, back: true }, boom: B(36, 28) } });
 add({ id: 'hail', name: 'Hailstorm', cat: 'air', unlock: 21, ammo: 1, icon: 'snow', color: '#4fc3f7',
-  desc: 'Twenty icy pellets fall fast and hard.',
-  spec: { apex: { n: 20, pattern: 'rain', spread: 300, speed: 500, spec: { r: 2, g: 1.5, color: '#b3e5fc', boom: B(12, 8) } } } });
+  desc: 'Mark the target with a flare; twenty icy pellets fall fast and hard on it.',
+  spec: { r: 3, color: '#b3e5fc', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(12, 4),
+    sky: { n: 20, pattern: 'rain', spread: 300, speed: 500, delay: 0.3, spec: { r: 2, g: 1.5, color: '#b3e5fc', boom: B(12, 8) } } } });
 add({ id: 'wall', name: 'Wall', cat: 'terrain', unlock: 21, ammo: 1, icon: 'wall', color: '#6d4c41',
   desc: 'Raises a vertical wall of dirt.',
   spec: { nocrater: true, trail: 'none', boom: B(0, 0), split: { n: 6, pattern: 'stack', spread: 22, spec: { dirt: true, color: '#a1887f', boom: B(22, 0) } } } });
@@ -253,8 +255,9 @@ add({ id: 'area', name: 'Area Attack', cat: 'cluster', unlock: 23, ammo: 1, icon
   desc: 'Seven shells spread evenly across a wide zone.',
   spec: { apex: { n: 7, pattern: 'line', spread: 420, speed: 60, spec: { boom: B(28, 18) } } } });
 add({ id: 'stickyrain', name: 'Sticky Rain', cat: 'air', unlock: 23, ammo: 1, icon: 'rain', color: '#7cb342',
-  desc: 'Rain that clings and then detonates.',
-  spec: { apex: { n: 10, pattern: 'rain', spread: 260, speed: 320, spec: { r: 3, stick: 0.9, color: '#c5e1a5', boom: B(20, 13) } } } });
+  desc: 'A flare marks the spot; the rain that follows clings and then detonates.',
+  spec: { r: 3, color: '#c5e1a5', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(12, 4),
+    sky: { n: 10, pattern: 'rain', spread: 260, speed: 320, delay: 0.3, spec: { r: 3, stick: 0.9, color: '#c5e1a5', boom: B(20, 13) } } } });
 add({ id: 'triplepalm', name: 'Triple Palm', cat: 'cluster', unlock: 23, ammo: 1, icon: 'split', color: '#2e7d32',
   desc: 'Three trunks that each burst into fronds.',
   spec: { boom: B(20, 12), split: { n: 3, pattern: 'up', spread: 24, speed: 420, spec: { color: '#a5d6a7',
@@ -272,8 +275,8 @@ add({ id: 'ghostlets', name: 'Ghostlets', cat: 'jet', unlock: 24, ammo: 1, icon:
 add({ id: 'heavyhover', name: 'Heavy Hover-Ball', cat: 'bounce', unlock: 25, ammo: 1, icon: 'bubble', color: '#0097a7',
   desc: 'A heavier floater with a serious payload.', spec: { r: 7, g: 0.5, bounce: { n: 4, k: 0.7 }, color: '#80deea', boom: B(46, 36) } });
 add({ id: 'carpet', name: 'Carpet Bomb', cat: 'air', unlock: 25, ammo: 1, icon: 'rain', color: '#01579b',
-  desc: 'Nine bombs across a wide strip.',
-  spec: { boom: B(20, 10), sky: { n: 9, pattern: 'rain', spread: 400, speed: 380, spec: { boom: B(28, 18) } } } });
+  desc: 'A marker flare, then nine bombs across a wide strip around it.',
+  spec: { r: 3.5, color: '#ffab40', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(14, 6), sky: { n: 9, pattern: 'rain', spread: 400, speed: 380, delay: 0.35, spec: { boom: B(28, 18) } } } });
 add({ id: 'comet', name: 'Comet', cat: 'basic', unlock: 25, ammo: 1, icon: 'comet', color: '#ff8f00',
   desc: 'A burning rock from deep space.', spec: { r: 7, speed: 1.25, g: 0.8, trail: 'fire', color: '#ffcc80', boom: B(50, 46) } });
 add({ id: 'mudpie', name: 'Mud Pie', cat: 'terrain', unlock: 25, ammo: 1, icon: 'dirt', color: '#4e342e',
@@ -284,8 +287,9 @@ add({ id: 'pyro', name: 'Pyrotechnics', cat: 'cluster', unlock: 26, ammo: 1, ico
   spec: { trail: 'spark', apex: { n: 6, pattern: 'up', spread: 120, speed: 260, spec: { fuse: 0.6, trail: 'spark', boom: B(16, 9),
     split: { n: 5, pattern: 'ring', speed: 200, spec: { r: 2.5, trail: 'spark', colors: RAINBOW, boom: B(12, 7) } } } } } });
 add({ id: 'snowstorm', name: 'Snowstorm', cat: 'air', unlock: 26, ammo: 1, icon: 'snow', color: '#b3e5fc',
-  desc: 'A blizzard of sixteen flakes drifting down.',
-  spec: { apex: { n: 16, pattern: 'rain', spread: 320, speed: 200, speedVar: 0.5, spec: { r: 2.5, drag: 0.3, color: '#ffffff', boom: B(14, 8) } } } });
+  desc: 'A flare lands, and a blizzard of sixteen flakes drifts down on it.',
+  spec: { r: 3, color: '#ffffff', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.45, marker: true, boom: B(12, 4),
+    sky: { n: 16, pattern: 'rain', spread: 320, speed: 200, speedVar: 0.5, delay: 0.3, spec: { r: 2.5, drag: 0.3, color: '#ffffff', boom: B(14, 8) } } } });
 add({ id: 'volcano', name: 'Volcano', cat: 'heavy', unlock: 26, ammo: 1, icon: 'mountain', color: '#d84315',
   desc: 'Erupts a column of molten rock straight up.',
   spec: { trail: 'fire', boom: B(30, 16), split: { n: 10, pattern: 'up', spread: 50, speed: 520, speedVar: 0.4, spec: { trail: 'fire', r: 3, g: 1.3, color: '#ff8a65', boom: B(22, 14) } } } });
@@ -301,8 +305,9 @@ add({ id: 'ball25', name: 'TwentyFive-Ball', cat: 'cluster', unlock: 28, ammo: 1
   desc: 'Twenty-five bomblets. Saturation.',
   spec: { apex: { n: 25, pattern: 'fan', spread: 120, inherit: 1, speedVar: 0.3, spec: { r: 2.5, boom: B(14, 7) } } } });
 add({ id: 'meteor', name: 'Meteor Shower', cat: 'air', unlock: 28, ammo: 1, icon: 'meteor', color: '#ff7043',
-  desc: 'Five flaming meteors crash down.',
-  spec: { trail: 'fire', apex: { n: 5, pattern: 'rain', spread: 260, speed: 520, spec: { r: 5, trail: 'fire', color: '#ff8a65', boom: B(32, 24) } } } });
+  desc: 'A burning flare bounces to rest, then five flaming meteors crash down on it.',
+  spec: { r: 4, trail: 'fire', color: '#ff8a65', bounce: { n: 2, k: 0.4 }, stick: 0.5, marker: true, boom: B(14, 6),
+    sky: { n: 5, pattern: 'rain', spread: 260, speed: 520, delay: 0.4, spec: { r: 5, trail: 'fire', color: '#ff8a65', boom: B(32, 24) } } } });
 add({ id: 'chainreaction', name: 'Chain Reaction', cat: 'terrain', unlock: 28, ammo: 1, icon: 'chain', color: '#2e7d32',
   desc: 'Each blast seeds the next.',
   spec: { boom: B(26, 16), split: { n: 3, pattern: 'fan', tilt: -40, spread: 40, inherit: 0.6, speed: 120, spec: { boom: B(24, 15),
@@ -318,7 +323,7 @@ add({ id: 'rave', name: 'Rave', cat: 'cluster', unlock: 29, ammo: 1, icon: 'fire
 add({ id: 'nuke', name: 'Nuke', cat: 'heavy', unlock: 30, ammo: 1, icon: 'nuke', color: '#fdd835',
   desc: 'A proper mushroom cloud. Keep your distance.', spec: { r: 7, shake: 1, mushroom: true, color: '#fff176', boom: B(85, 70) } });
 add({ id: 'solarflare', name: 'Solar Flare', cat: 'laser', unlock: 30, ammo: 1, icon: 'sun', color: '#ffa000',
-  desc: 'Calls a beam of sunlight straight down on the target.', spec: { boom: B(20, 10), skylaser: { w: 10, dmg: 48, delay: 0.3 }, color: '#ffe082', trail: 'spark' } });
+  desc: 'A flare settles, then a beam of sunlight comes straight down on it.', spec: { r: 3.5, bounce: { n: 2, k: 0.4 }, stick: 0.3, boom: B(14, 6), skylaser: { w: 10, dmg: 48, delay: 0.3 }, color: '#ffe082', trail: 'spark' } });
 add({ id: 'manyminions', name: 'Many-Minions', cat: 'bounce', unlock: 30, ammo: 1, icon: 'popcorn', color: '#ff8a65',
   desc: 'Six hopping minions scatter across the field.',
   spec: { boom: B(20, 12), split: { n: 6, pattern: 'up', spread: 100, speed: 260, spec: { r: 3, bounce: { n: 4, k: 0.7 }, color: '#ffab91', boom: B(18, 12) } } } });
@@ -333,7 +338,7 @@ add({ id: 'riot', name: 'Riot', cat: 'heavy', unlock: 31, ammo: 1, icon: 'firewo
   spec: { boom: B(30, 18), split: { n: 12, pattern: 'ring', speed: 300, spec: { bounce: { n: 2, k: 0.6 }, boom: B(20, 13) } } } });
 add({ id: 'beaconator', name: 'Beaconator', cat: 'air', unlock: 32, ammo: 1, icon: 'beacon', color: '#00c853',
   desc: 'Plants a beacon. A moment later, six heavy bombs answer.',
-  spec: { nocrater: true, marker: true, color: '#69f0ae', boom: B(0, 0), sky: { n: 6, pattern: 'rain', spread: 60, speed: 480, delay: 1.0, spec: { r: 5, color: '#69f0ae', boom: B(36, 28) } } } });
+  spec: { nocrater: true, marker: true, color: '#69f0ae', trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.3, boom: B(0, 0), sky: { n: 6, pattern: 'rain', spread: 60, speed: 480, delay: 1.0, spec: { r: 5, color: '#69f0ae', boom: B(36, 28) } } } });
 add({ id: 'apache', name: 'Apache', cat: 'air', unlock: 32, ammo: 1, icon: 'heli', color: '#37474f',
   desc: 'Levels out at the apex and strafes with rockets.',
   spec: { ufo: { speed: 220, drops: 6, interval: 0.14, bomb: { r: 3, trail: 'line', color: '#ffab91', boom: B(22, 15) } } } });
@@ -343,8 +348,8 @@ add({ id: 'deadriser', name: 'Dead Riser', cat: 'air', unlock: 33, ammo: 1, icon
   desc: 'Where it lands, five shells rise from the grave.',
   spec: { nocrater: true, color: '#b39ddb', boom: B(0, 0), split: { n: 5, pattern: 'rise', spread: 120, speed: 520, spec: { phase: 0.7, r: 4, trail: 'line', color: '#b39ddb', boom: B(28, 20) } } } });
 add({ id: 'firestorm', name: 'FireStorm', cat: 'heavy', unlock: 34, ammo: 1, icon: 'fire', color: '#e64a19',
-  desc: 'Rains fire from the sky and splashes more on impact.',
-  spec: { trail: 'fire', boom: B(34, 22), apex: { n: 10, pattern: 'rain', spread: 280, speed: 380, keep: true, spec: { trail: 'fire', r: 3, color: '#ff7043', boom: B(22, 15) } },
+  desc: 'Splashes fire on impact, then rains more down on the same spot.',
+  spec: { trail: 'fire', boom: B(34, 22), sky: { n: 10, pattern: 'rain', spread: 280, speed: 380, delay: 0.4, spec: { trail: 'fire', r: 3, color: '#ff7043', boom: B(22, 15) } },
     split: { n: 6, pattern: 'up', spread: 140, speed: 280, spec: { trail: 'fire', r: 3, color: '#ff7043', boom: B(18, 12) } } } });
 add({ id: 'moles', name: 'Moles', cat: 'dig', unlock: 34, ammo: 1, icon: 'mole', color: '#795548',
   desc: 'Three moles tunnel toward enemies from below.',
@@ -376,8 +381,9 @@ add({ id: 'mamaseagull', name: 'Mama Seagull', cat: 'air', unlock: 39, ammo: 1, 
   spec: { apex: { n: 7, pattern: 'v', spread: 90, speed: 240, spec: { g: 0.35, thrust: { a: 220, dur: 1.4 }, r: 4, color: '#ffffff', trail: 'line', boom: B(26, 18),
     apex: { n: 3, pattern: 'v', spread: 50, speed: 180, spec: { g: 0.4, r: 2.5, color: '#ffffff', boom: B(16, 10) } } } } } });
 add({ id: 'asteroid', name: 'Asteroid Storm', cat: 'air', unlock: 40, ammo: 1, icon: 'meteor', color: '#bf360c',
-  desc: 'Eight heavy asteroids pummel a wide area.',
-  spec: { trail: 'fire', apex: { n: 8, pattern: 'rain', spread: 400, speed: 560, spec: { r: 6, g: 1.5, trail: 'fire', color: '#ff8a65', boom: B(38, 28) } } } });
+  desc: 'A flare calls eight heavy asteroids down on a wide area around it.',
+  spec: { r: 4, trail: 'fire', color: '#ff8a65', bounce: { n: 2, k: 0.4 }, stick: 0.5, marker: true, boom: B(14, 6),
+    sky: { n: 8, pattern: 'rain', spread: 400, speed: 560, delay: 0.4, spec: { r: 6, g: 1.5, trail: 'fire', color: '#ff8a65', boom: B(38, 28) } } } });
 add({ id: 'turretmob', name: 'TurretMob', cat: 'guided', unlock: 40, ammo: 1, icon: 'turret', color: '#455a64',
   desc: 'Deploys three turrets that each fire at the nearest enemy.',
   spec: { boom: B(14, 6), split: { n: 3, pattern: 'ground', spread: 160, spec: { stick: 2.0, r: 5, color: '#90a4ae', boom: B(12, 4),
@@ -391,7 +397,7 @@ add({ id: 'cutter', name: 'Cutter', cat: 'laser', unlock: 42, ammo: 1, icon: 'la
 add({ id: 'drone', name: 'Kamikaze Drone', cat: 'guided', unlock: 43, ammo: 1, icon: 'drone', color: '#4a148c',
   desc: 'Flies itself into the target.', spec: { homing: 1.6, thrust: { a: 320, dur: 4 }, g: 0.2, trail: 'line', color: '#ea80fc', boom: B(30, 50) } });
 add({ id: 'orbital', name: 'Orbital Strike', cat: 'laser', unlock: 44, ammo: 1, icon: 'sun', color: '#ff6f00',
-  desc: 'Paints a target for a devastating beam from orbit.', spec: { nocrater: true, marker: true, color: '#ffd180', boom: B(0, 0), skylaser: { w: 24, dmg: 80, delay: 0.9, carve: 14 } } });
+  desc: 'A targeting flare bounces to rest and paints the spot for a devastating beam from orbit.', spec: { r: 3.5, nocrater: true, marker: true, trail: 'spark', bounce: { n: 2, k: 0.4 }, stick: 0.3, color: '#ffd180', boom: B(0, 0), skylaser: { w: 24, dmg: 80, delay: 0.9, carve: 14 } } });
 add({ id: 'meganuke', name: 'Mega-Nuke', cat: 'heavy', unlock: 45, ammo: 1, icon: 'nuke', color: '#ffc107',
   desc: 'The ever-powerful endgame. Reshapes the map and everyone on it.', spec: { r: 9, shake: 1.6, mushroom: true, color: '#ffe57f', boom: B(125, 100) } });
 add({ id: 'blackhole', name: 'Black Hole', cat: 'quirky', unlock: 46, ammo: 1, icon: 'hole', color: '#311b92',
@@ -415,7 +421,7 @@ add({ id: 'wormhole', name: 'Wormhole', cat: 'dig', unlock: 41, ammo: 1, icon: '
   desc: 'Tunnels, then throws seekers out the far end.',
   spec: { dig: { len: 400, w: 9 }, color: '#b388ff', boom: B(24, 16), split: { n: 4, pattern: 'up', spread: 120, speed: 300, spec: { homing: 0.8, r: 3, color: '#b388ff', boom: B(22, 16) } } } });
 add({ id: 'lightning', name: 'Lightning', cat: 'laser', unlock: 26, ammo: 1, icon: 'zigzag', color: '#ffd600',
-  desc: 'A jagged bolt from the heavens strikes where it lands.', spec: { boom: B(16, 8), skylaser: { w: 6, dmg: 40, delay: 0.1 }, color: '#ffff8d', trail: 'spark' } });
+  desc: 'A jagged bolt from the heavens strikes where the rod comes to rest.', spec: { r: 3, bounce: { n: 2, k: 0.4 }, stick: 0.3, boom: B(12, 5), skylaser: { w: 6, dmg: 40, delay: 0.1 }, color: '#ffff8d', trail: 'spark' } });
 add({ id: 'tornado', name: 'Tornado', cat: 'quirky', unlock: 36, ammo: 1, icon: 'spiral', color: '#90a4ae',
   desc: 'A spinning column that flings bomblets up as it travels.',
   spec: { roll: { dur: 3, speed: 150 }, color: '#cfd8dc', boom: B(26, 14), timed: { t: 0.35, repeat: 6, n: 1, pattern: 'up', spread: 40, speed: 300, spec: { r: 3, boom: B(18, 11), color: '#cfd8dc' } } } });

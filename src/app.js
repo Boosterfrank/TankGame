@@ -10,7 +10,12 @@ import { MAP_STYLES } from './terrain-gen.js';
 import * as S from './ui/screens.js';
 import { onlineScreen, onlineLobbyScreen } from './ui/online.js';
 import { DevTools } from './ui/devtools.js';
-import { ONLINE_SERVER } from './config.js';
+import { ONLINE_SERVER, DEFAULT_SETTINGS } from './config.js';
+import { MusicPlayer } from './music.js';
+import { Intro } from './intro.js';
+
+// Audio sink for the background attract-mode battle (it must stay silent).
+const SILENT_AUDIO = { init() {}, play() {}, engine() {}, update() {}, setMuted() {}, setVolume() {} };
 
 const STEP = 1 / 60;
 
@@ -39,6 +44,11 @@ export class App {
     this.chat = document.getElementById('chat');
     this.chatOpen = false;
     this.dev = new DevTools(this);
+    this.music = new MusicPlayer(this.audio);
+    this.intro = null;          // Intro cutscene while playing
+    this.attract = null;        // bots-only battle rendered behind the menus
+    this.attractAcc = 0;
+    this.np = document.getElementById('nowplaying');
   }
 
   serverUrl() { return (this.profile.settings.server || ONLINE_SERVER || '').trim(); }
@@ -48,7 +58,12 @@ export class App {
     window.addEventListener('resize', () => this.fit());
     this.bindInput();
     this.applyAudioSettings();
-    this.show('title');
+    this.np.querySelector('.np-mute').addEventListener('click', () => {
+      this.profile.settings.music = !this.profile.settings.music;
+      saveProfile(this.profile);
+      this.applyAudioSettings();
+    });
+    this.show('boot');
     requestAnimationFrame((ts) => this.loop(ts));
     window.__app = this;
     window.__Game = Game;
@@ -62,8 +77,49 @@ export class App {
   }
 
   applyAudioSettings() {
-    this.audio.setMuted(!this.profile.settings.sound);
-    this.audio.setVolume(this.profile.settings.volume);
+    const s = this.profile.settings;
+    this.audio.setMuted(!s.sound);
+    this.audio.setVolume(s.volume);
+    this.music.volume = s.musicVolume ?? 0.6;
+    if (this.music.enabled !== (s.music !== false)) this.music.setEnabled(s.music !== false);
+    else this.music.fadeTo(this.music.targetVolume(), 0.3);
+    this.np.querySelector('.np-mute').textContent = s.music === false ? 'UNMUTE' : 'MUTE';
+  }
+
+  // First click on the boot screen: unlock audio, start music, play the intro (or go straight to the menu).
+  beginSession() {
+    this.audio.init();
+    this.music.play();
+    if (this.profile.settings.intro !== false) this.startIntro();
+    else { this.startAttract(); this.show('menu'); }
+  }
+
+  startIntro() {
+    this.show(null);
+    this.screenName = 'intro';
+    this.attract = null;
+    this.intro = new Intro(this);
+  }
+
+  onIntroDone() {
+    this.intro = null;
+    this.startAttract();
+    this.show('menu');
+  }
+
+  // Bots fight each other behind the menus. Silent, restarts itself when a battle ends.
+  startAttract() {
+    const rng = new RNG(Date.now());
+    const names = rng.shuffle(BOT_NAMES).slice(0, 5);
+    const g = new Game({
+      settings: { ...DEFAULT_SETTINGS, arsenal: 'all', difficulty: 'Hard', turnTime: 4, items: false, crates: true, hp: 150, map: 'random' },
+      players: names.map((n, i) => ({ name: n, isBot: true, team: 100 + i, level: 45 })),
+      seed: rng.int(1, 1e9), audio: SILENT_AUDIO,
+    });
+    g.dev = {};
+    g.on.gameOver = () => { setTimeout(() => { if (this.attract === g) this.startAttract(); }, 2500); };
+    this.attract = g;
+    this.attractAcc = 0;
   }
 
   // ------------------------------------------------------------ screens
@@ -80,6 +136,7 @@ export class App {
       case 'help': node = S.helpScreen(this); break;
       case 'settings': node = S.settingsScreen(this); break;
       case 'results': node = S.resultsScreen(this, ...args); break;
+      case 'boot': case 'title': node = S.bootScreen(this); break;
       case 'online': node = onlineScreen(this); break;
       case 'onlineLobby': node = onlineLobbyScreen(this); break;
       case null: break;
@@ -91,6 +148,11 @@ export class App {
       if (!['online', 'onlineLobby'].includes(name) && this.session.phase !== 'game') { this.session.leave(); this.session = null; }
     }
     if (name) this.audio.play('click');
+    if (name && name !== 'boot' && name !== 'title') {
+      if (this.intro) this.intro = null;
+      if (!this.game && !this.attract) this.startAttract();
+      if (!this.game) this.music.duck(false);
+    }
     this.dev.onScreen(name);
   }
 
@@ -147,6 +209,8 @@ export class App {
     const g = this.game;
     g.dev = this.dev.flags;
     this.acc = 0;
+    this.attract = null;
+    this.music.duck(true);
     if (config.online) {
       const onClose = () => { if (this.game === g) { this.hud.hide(); this.removeSpectate(); this.closeChat(); this.game = null; this.session = null; this.modal.innerHTML = ''; this.modal.classList.remove('hidden'); this.modal.append(S.confirmModal('Connection to the room was lost.', () => { this.closeModal(); this.show('menu'); }, () => { this.closeModal(); this.show('menu'); })); } };
       config.online.on('close', onClose);
@@ -235,6 +299,7 @@ export class App {
   bindInput() {
     window.addEventListener('keydown', (e) => {
       if (e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (this.intro) { this.intro.input(); return; }
       const g = this.game;
       this.input.keys.add(e.code);
       if (!g) return;
@@ -254,6 +319,7 @@ export class App {
       const r = this.canvas.getBoundingClientRect();
       return { x: ((e.clientX - r.left) / r.width) * WORLD_W, y: ((e.clientY - r.top) / r.height) * WORLD_H };
     };
+    this.stage.addEventListener('pointerdown', () => { if (this.intro) this.intro.input(); });
     this.canvas.addEventListener('pointerdown', (e) => {
       const g = this.game;
       if (!g || g.phase !== 'aim' || !g.current || g.current.locked || g.waitingPass) return;
@@ -305,8 +371,13 @@ export class App {
     const dt = Math.min(0.05, (ts - (this.lastTs || ts)) / 1000);
     this.lastTs = ts;
     this.time += dt;
+    this.music.update();
+    this.stage.style.setProperty('--bass', this.music.bass.toFixed(3));
     const g = this.game;
-    if (g) {
+    if (this.intro) {
+      this.intro.update(dt);
+      this.intro.draw(this.renderer);
+    } else if (g) {
       this.handleHeldKeys(dt);
       const spectating = g.phase !== 'over' && (g.online ? !(g.me && g.me.alive) : g.humansAlive().length === 0);
       if (spectating && !this.spectateEl) { this.spectateEl = S.spectateBar(this, !!g.online); this.stage.append(this.spectateEl); if (!g.online) this.timeScale = 2.5; }
@@ -322,10 +393,28 @@ export class App {
         const s = Math.ceil(g.turnTimer);
         if (s !== this.lastTick) { this.lastTick = s; this.audio.play('tick'); }
       }
+    } else if (this.attract) {
+      this.attractAcc += dt;
+      let steps = 0;
+      while (this.attractAcc >= STEP && steps < 4) { this.attract.update(STEP); this.attractAcc -= STEP; steps++; }
+      if (steps >= 4) this.attractAcc = 0;
+      this.renderer.drawGame(this.attract, this.time, dt, { attract: true, music: this.music });
     } else {
-      this.renderer.drawMenu(this.time);
+      this.renderer.drawMenu(this.time, dt, { music: this.music });
     }
+    this.updateNowPlaying();
     this.audio.update();
     requestAnimationFrame((t2) => this.loop(t2));
+  }
+
+  updateNowPlaying() {
+    const show = !this.game && !this.intro && this.screenName !== 'boot' && this.screenName !== 'title' && this.music.started && !this.music.failed;
+    this.np.classList.toggle('hidden', !show);
+    if (!show) return;
+    const title = this.np.querySelector('.np-title');
+    if (title.textContent !== this.music.title) title.textContent = this.music.title;
+    const bars = this.np.querySelectorAll('.eq i');
+    const bins = [2, 5, 9, 16, 28];
+    bars.forEach((b, i) => { const v = this.music.active ? this.music.data[bins[i]] / 255 : 0; b.style.height = `${4 + v * 18}px`; });
   }
 }

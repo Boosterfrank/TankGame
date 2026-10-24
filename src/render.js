@@ -32,6 +32,8 @@ export class Renderer {
     this.vignette = null;
     this.banner = null;
     this.time = 0;
+    this.motes = null;
+    this.shooting = []; this.shootT = 1.5;
     this.makeVignette();
   }
 
@@ -95,12 +97,13 @@ export class Renderer {
     return ctx;
   }
 
-  drawMenu(t) {
+  drawMenu(t, dt = 1 / 60, opts = {}) {
     const ctx = this.begin();
     this.makeBackground(this.bgSeed ?? 42);
     // slow parallax drift of the nebula
     const ox = -24 + Math.sin(t * 0.07) * 20, oy = -14 + Math.cos(t * 0.05) * 12;
     ctx.drawImage(this.bg, ox, oy, WORLD_W * 1.04, WORLD_H * 1.04);
+    if (opts.music) this.drawBassPulse(ctx, opts.music);
     // slow drifting sheen
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -109,6 +112,86 @@ export class Renderer {
     g.addColorStop(0, 'rgba(80,160,255,0)'); g.addColorStop(0.5, 'rgba(80,160,255,0.05)'); g.addColorStop(1, 'rgba(80,160,255,0)');
     ctx.fillStyle = g; ctx.fillRect(x, 0, 300, WORLD_H);
     ctx.restore();
+    this.drawAmbient(ctx, t, dt, opts.music);
+    ctx.drawImage(this.vignette, 0, 0);
+  }
+
+  // Nebula brightens with the music's bass.
+  drawBassPulse(ctx, music) {
+    if (!music.active || music.bass < 0.02) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = Math.min(0.3, music.bass * 0.3);
+    ctx.drawImage(this.bg, 0, 0);
+    ctx.restore();
+  }
+
+  // Floating motes, occasional shooting stars and the music visualizer.
+  drawAmbient(ctx, t, dt, music) {
+    if (!this.motes) {
+      this.motes = [];
+      for (let i = 0; i < 70; i++) this.motes.push({ x: Math.random() * WORLD_W, y: Math.random() * WORLD_H, vx: 6 + Math.random() * 14, vy: -8 - Math.random() * 16, s: 0.8 + Math.random() * 1.8, ph: Math.random() * 6.28 });
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const m of this.motes) {
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      if (m.y < -10) { m.y = WORLD_H + 10; m.x = Math.random() * WORLD_W; }
+      if (m.x > WORLD_W + 10) m.x = -10;
+      const a = 0.18 + 0.18 * Math.sin(t * 1.3 + m.ph);
+      ctx.fillStyle = `rgba(160,220,255,${a})`;
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.s, 0, Math.PI * 2); ctx.fill();
+    }
+    this.shootT -= dt;
+    if (this.shootT <= 0) {
+      this.shootT = 2.5 + Math.random() * 6;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      this.shooting.push({ x: Math.random() * WORLD_W, y: Math.random() * WORLD_H * 0.35, vx: dir * (900 + Math.random() * 600), vy: 350 + Math.random() * 300, life: 0.55, max: 0.55 });
+    }
+    for (let i = this.shooting.length - 1; i >= 0; i--) {
+      const s = this.shooting[i];
+      s.life -= dt; s.x += s.vx * dt; s.y += s.vy * dt;
+      if (s.life <= 0) { this.shooting.splice(i, 1); continue; }
+      const a = Math.min(1, s.life / 0.2) * 0.9;
+      const tx = s.x - s.vx * 0.11, ty = s.y - s.vy * 0.11;
+      const g = ctx.createLinearGradient(s.x, s.y, tx, ty);
+      g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tx, ty); ctx.stroke();
+    }
+    ctx.restore();
+    if (music) this.drawVisualizer(ctx, music, t);
+  }
+
+  // Spectrum bars along the bottom edge plus a soft glow that follows the music.
+  drawVisualizer(ctx, music, t) {
+    if (!music.active) return;
+    const data = music.data;
+    const n = 56, bw = WORLD_W / n;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createLinearGradient(0, WORLD_H - 260, 0, WORLD_H);
+    glow.addColorStop(0, 'rgba(57,208,255,0)'); glow.addColorStop(1, `rgba(57,208,255,${0.05 + music.level * 0.25})`);
+    ctx.fillStyle = glow; ctx.fillRect(0, WORLD_H - 260, WORLD_W, 260);
+    for (let i = 0; i < n; i++) {
+      const v = data[i + 1] / 255;
+      const h = 3 + v * v * 240 * (1 + music.bass * 0.35);
+      const hue = 188 + (i / n) * 120;
+      const x = i * bw + 3, w = bw - 6;
+      const g = ctx.createLinearGradient(0, WORLD_H - h, 0, WORLD_H);
+      g.addColorStop(0, `hsla(${hue}, 100%, 72%, 0.85)`); g.addColorStop(1, `hsla(${hue}, 100%, 55%, 0.08)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(x, WORLD_H - h, w, h);
+      ctx.fillStyle = `hsla(${hue}, 100%, 85%, 0.95)`;
+      ctx.fillRect(x, WORLD_H - h - 3, w, 3);
+    }
+    ctx.restore();
+  }
+
+  drawAttractOverlay(ctx, t, dt, music) {
+    ctx.fillStyle = 'rgba(3,5,10,0.5)';
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    this.drawAmbient(ctx, t, dt, music);
     ctx.drawImage(this.vignette, 0, 0);
   }
 
@@ -120,13 +203,14 @@ export class Renderer {
     return COLORS.enemy;
   }
 
-  drawGame(game, t, dt) {
+  drawGame(game, t, dt, opts = {}) {
     const ctx = this.begin();
     this.time = t;
     this.makeBackground(game.seed);
     ctx.save();
     ctx.translate(game.fx.shakeX, game.fx.shakeY);
     ctx.drawImage(this.bg, 0, 0);
+    if (opts.music) this.drawBassPulse(ctx, opts.music);
     // tracers
     if (game.settings.tracers) {
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
@@ -148,12 +232,15 @@ export class Renderer {
       ctx.beginPath(); ctx.arc(m.x, m.y, 14 + p * 8, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(m.x - 24, m.y); ctx.lineTo(m.x + 24, m.y); ctx.moveTo(m.x, m.y - 24); ctx.lineTo(m.x, m.y + 24); ctx.stroke();
     }
-    for (const tank of game.tanks) if (tank.alive) this.drawTag(ctx, tank, game, t);
-    const cur = game.current;
-    if (game.phase === 'aim' && cur && !cur.locked && !game.waitingPass) this.drawAim(ctx, cur, game, t);
-    if (game.dev?.revealAims) for (const tk of game.tanks) if (tk.isBot && tk.alive && tk.shot) this.drawTrajectory(ctx, tk, tk.shot, game, 'rgba(255,82,82,0.8)');
-    if (game.dev?.hitboxes || game.dev?.debug) this.drawDebug(ctx, game);
+    if (!opts.attract) {
+      for (const tank of game.tanks) if (tank.alive) this.drawTag(ctx, tank, game, t);
+      const cur = game.current;
+      if (game.phase === 'aim' && cur && !cur.locked && !game.waitingPass) this.drawAim(ctx, cur, game, t);
+      if (game.dev?.revealAims) for (const tk of game.tanks) if (tk.isBot && tk.alive && tk.shot) this.drawTrajectory(ctx, tk, tk.shot, game, 'rgba(255,82,82,0.8)');
+      if (game.dev?.hitboxes || game.dev?.debug) this.drawDebug(ctx, game);
+    }
     ctx.restore();
+    if (opts.attract) { this.drawAttractOverlay(ctx, t, dt, opts.music); return; }
     this.drawOverlay(ctx, game, t);
   }
 
@@ -243,7 +330,11 @@ export class Renderer {
   }
 
   drawTank(ctx, tk, game, t) {
-    const color = tk.alive ? this.relationColor(game, tk) : '#37474f';
+    this.drawTankBody(ctx, tk, tk.alive ? this.relationColor(game, tk) : '#37474f', t);
+  }
+
+  // Draws any tank-like object (used by the game, the intro and previews).
+  drawTankBody(ctx, tk, color, t) {
     ctx.save();
     ctx.translate(tk.x, tk.y);
     ctx.rotate(tk.tilt);

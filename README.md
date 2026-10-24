@@ -58,6 +58,8 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
   (level 1 starts with 4, everything is unlocked by level 50).
 - **Mastery.** Each family levels from Tier I to Tier IV through the damage it deals,
   gaining damage, blast radius and extra shells. Gears (earned per game) can buy a tier early.
+- **Flares.** Air-support weapons (Rain, Meteor Shower, Airstrike, Solar Flare and friends) fire a
+  marker flare that bounces to a stop; the strike lands exactly where the flare rests.
 - **Items** (repair, shield, teleport, double damage, fuel, ammo) never end your turn.
 - **Supply drops** parachute in; drive into them for weapons you may not even have unlocked.
 - Deathmatch or Team Battle, 100–300 HP, five wind levels, turn timers, bot difficulty,
@@ -76,11 +78,23 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
 | `E` | Items |
 | `Esc` | Close panel / leave game |
 
+## Presentation
+
+- **Intro cutscene.** The first click plays a short cinematic (studio card, two tanks rolling in, a
+  slow-motion shell, the hit, the title reveal). Any click or key skips it; Settings can turn it
+  off or replay it. `INTRO_STUDIO_CARD` in `src/config.js` controls the studio card.
+- **Living menus.** A silent bot battle plays behind every menu screen, with drifting motes,
+  shooting stars and a music-reactive glow on the title.
+- **Music and visualizer.** `MUSIC_TRACKS` in `src/config.js` lists the tracks (compressed OGG/MP3
+  copies of `assets/menu_music.wav` load first). An AnalyserNode drives the spectrum bars along the
+  bottom of the menus, the pulsing nebula and the equalizer in the now-playing chip. Music ducks
+  during battles. Volume and on/off live in Settings.
+
 ## Developer tools
 
 A hidden developer console (profile cheats, god mode, infinite ammo, time scale, debug overlays,
 bot-aim reveal, a weapon test range and a spectator bot battle) is gated behind a password. The
-gate opens after clicking the Qubiplex logo in the top bar five times quickly; the password hash
+gate opens after clicking the profile avatar in the top bar five times quickly; the password hash
 lives in `src/ui/devtools.js`. Once unlocked, the `` ` `` key or the DEV button toggles the panel.
 
 ## Project layout
@@ -100,6 +114,8 @@ src/fx.js             particles, explosions, beams, floating text, screen shake
 src/audio.js          procedural WebAudio sound effects
 src/profile.js        localStorage profile: XP, levels, gears, mastery
 src/icons.js          procedural pictogram icons for weapons and items
+src/music.js          music playback + analyser for the visualizer
+src/intro.js          opening cutscene
 src/online.js         online session: relay protocol client and game bridge
 src/ui/hud.js         bottom HUD, weapons grid, items panel
 src/ui/screens.js     title, hub, lobby, armory, help, settings, results

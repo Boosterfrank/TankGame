@@ -12,6 +12,9 @@ page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
 await page.goto('http://localhost:8080/', { waitUntil: 'load' });
 await page.click('.start-btn');
+await page.waitForTimeout(300);
+await page.keyboard.press('Escape');
+await page.waitForSelector('.menu-screen', { timeout: 10000 });
 await page.waitForTimeout(200);
 
 const report = await page.evaluate(async () => {

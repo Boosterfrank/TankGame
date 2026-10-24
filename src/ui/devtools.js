@@ -1,6 +1,6 @@
 // Developer tools: hidden behind a password gate (SHA-256 compared, never stored in plaintext).
-// Open the gate by clicking the Qubiplex logo five times quickly; once unlocked, the ` key or the
-// DEV button toggles the panel.
+// Open the gate by clicking the profile avatar in the top bar five times quickly; once unlocked,
+// the ` key or the DEV button toggles the panel.
 import { el, sha256, clamp, fmt } from '../util.js';
 import { FAMILIES, FAMILY_BY_ID, getWeapon } from '../weapons.js';
 import { saveProfile, resetProfile, MAX_LEVEL } from '../profile.js';
@@ -23,7 +23,10 @@ export class DevTools {
     this.log = [];
   }
 
-  logoClick() {
+  logoClick() { this.secretClick(); }
+
+  // Five quick clicks on the profile avatar open the gate.
+  secretClick() {
     const now = performance.now();
     this.clicks = this.clicks.filter((t) => now - t < 2500);
     this.clicks.push(now);

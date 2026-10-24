@@ -1,7 +1,15 @@
 // Central game configuration. Change the name here and it updates everywhere.
 export const GAME_NAME = 'Unnamed Tank Game';
 export const STUDIO = 'Qubiplex';
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
+
+// Opening cutscene: show the studio logo card first (set false to skip it).
+export const INTRO_STUDIO_CARD = true;
+
+// Music tracks (first playable source wins). Compressed copies load far faster than the WAV.
+export const MUSIC_TRACKS = [
+  { title: 'Menu Theme', sources: ['assets/menu_music.ogg', 'assets/menu_music.mp3', 'assets/menu_music.wav'] },
+];
 
 // Default relay server for online play (a deployed worker/ URL, e.g. https://unnamed-tank-game-relay.<you>.workers.dev).
 // Players can override it in Settings; leave empty to hide online play until configured.

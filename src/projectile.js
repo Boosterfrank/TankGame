@@ -161,7 +161,8 @@ export class Projectile {
     this.game.audio.play('bounce');
     this.game.fx.burst(this.x, this.y, 5, 90, '#4fc3f7', 0.4, 2, { g: 1 });
     if (b.boom) this.game.explode(this, this.x, this.y, { keepAlive: true });
-    if (this.speed < 50) this.explode();
+    if (this.spec.stick) this.vx *= 0.75; // flares scrub speed on each hop
+    if (this.speed < 50) { if (this.spec.stick) this.stick(this.x, this.y); else this.explode(); }
   }
 
   startRoll() {

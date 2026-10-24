@@ -20,40 +20,36 @@ const TIPS = [
   'Rollers follow the ground. Fire them low along a slope.',
 ];
 
-function logoEl(size = 120) {
-  return el('img.logo', { src: 'assets/qubiplex-logo.webp', alt: STUDIO, style: { width: `${size}px`, height: `${size}px` } });
-}
-
-// Top-bar brand. Clicking the logo several times quickly opens the developer tools gate.
+// Top-bar brand (game name only).
 export function brandEl(app) {
-  const logo = logoEl(40);
-  logo.classList.add('brand-logo');
-  logo.addEventListener('click', () => app.dev.logoClick());
-  return el('div.brand', {}, [logo, el('span', { text: GAME_NAME }), app.dev.unlocked ? el('button.mini.dev-btn', { text: 'DEV', onclick: () => app.dev.toggle() }) : null]);
+  return el('div.brand', {}, [el('span', { text: GAME_NAME }), app.dev.unlocked ? el('button.mini.dev-btn', { text: 'DEV', onclick: () => app.dev.toggle() }) : null]);
 }
 
-export function titleScreen(app) {
-  const s = el('div.screen.title-screen', {}, [
-    el('div.title-inner', {}, [
-      logoEl(170),
-      el('div.studio', { text: STUDIO.toUpperCase() }),
-      el('h1.game-title', { html: GAME_NAME.split(' ').map((w) => `<span>${escapeHtml(w)}</span>`).join(' ') }),
-      el('div.tagline', { text: `Destructible terrain · ${TOTAL_WEAPONS} weapons · 8-player battles` }),
+// Minimal boot screen: one click unlocks audio and starts the intro.
+export function bootScreen(app) {
+  const tank = el('canvas.boot-tank', { width: 180, height: 100 });
+  drawMiniTank(tank, '#4cff5e', 2.4);
+  const s = el('div.screen.boot-screen', {}, [
+    el('div.boot-inner', {}, [
+      tank,
       el('button.btn.btn-primary.btn-big.start-btn', { text: 'CLICK TO START' }),
+      el('div.boot-hint', { text: app.profile.settings.intro === false ? 'Sound on' : 'Sound on · any key skips the intro' }),
     ]),
-    el('div.footer', { text: `${STUDIO} · v${VERSION}` }),
+    el('div.footer', { text: `v${VERSION}` }),
   ]);
-  const go = () => { app.audio.init(); app.show('menu'); };
+  let used = false;
+  const go = (e) => { if (used) return; used = true; e?.stopPropagation?.(); app.beginSession(); };
   s.querySelector('.start-btn').addEventListener('click', go);
   s.addEventListener('click', go);
   return s;
 }
+export const titleScreen = bootScreen;
 
 export function profileBar(app) {
   const p = app.profile;
   const need = xpForLevel(p.level);
   return el('div.profile-bar', {}, [
-    el('div.avatar', { text: p.name.slice(0, 2).toUpperCase() }),
+    el('div.avatar.secret', { text: p.name.slice(0, 2).toUpperCase(), title: p.name, onclick: () => app.dev.secretClick() }),
     el('div.pb-name', { text: p.name }),
     el('div.pb-level', {}, [el('small', { text: 'LEVEL' }), el('b', { text: p.level })]),
     el('div.pb-xp', {}, [el('div.pb-xp-fill', { style: { width: `${Math.min(100, (p.xp / need) * 100)}%` } }), el('span', { text: `${fmt(p.xp)} / ${fmt(need)} XP` })]),
@@ -78,7 +74,7 @@ export function menuScreen(app) {
       ]),
       el('div.menu-right', {}, [statsCard(app), tipCard()]),
     ]),
-    el('div.footer', { text: `${STUDIO} · v${VERSION} · ${FAMILIES.length} weapon families, ${TOTAL_WEAPONS} weapons` }),
+    el('div.footer', { text: `v${VERSION} · ${FAMILIES.length} weapon families, ${TOTAL_WEAPONS} weapons` }),
   ]);
   return s;
 }
@@ -231,10 +227,10 @@ export function lobbyScreen(app) {
   return s;
 }
 
-export function drawMiniTank(c, color) {
+export function drawMiniTank(c, color, scale = 1.2) {
   const x = c.getContext('2d');
   x.clearRect(0, 0, c.width, c.height);
-  x.save(); x.translate(c.width / 2, c.height - 8); x.scale(1.2, 1.2);
+  x.save(); x.translate(c.width / 2, c.height - 8); x.scale(scale, scale);
   x.fillStyle = '#14181d'; x.beginPath(); x.roundRect ? x.roundRect(-15, -7, 30, 7, 3.5) : x.rect(-15, -7, 30, 7); x.fill();
   x.fillStyle = '#2c333b'; for (const wx of [-10, -3.5, 3.5, 10]) { x.beginPath(); x.arc(wx, -3.5, 2.2, 0, Math.PI * 2); x.fill(); }
   x.fillStyle = color; x.beginPath(); x.moveTo(-14, -7); x.lineTo(14, -7); x.lineTo(11, -12); x.lineTo(-11, -12); x.closePath(); x.fill();
@@ -362,16 +358,21 @@ export function settingsScreen(app) {
   const sound = el('input', { type: 'checkbox', checked: p.settings.sound });
   const vol = el('input', { type: 'range', min: 0, max: 1, step: 0.05, value: p.settings.volume });
   const server = el('input.server-input', { type: 'text', value: p.settings.server || '', placeholder: 'https://your-relay.workers.dev', spellcheck: false });
+  const music = el('input', { type: 'checkbox', checked: p.settings.music !== false });
+  const mvol = el('input', { type: 'range', min: 0, max: 1, step: 0.05, value: p.settings.musicVolume ?? 0.6 });
+  const intro = el('input', { type: 'checkbox', checked: p.settings.intro !== false });
   const save = () => {
     p.name = name.value.trim() || 'Commander';
     p.settings.sound = sound.checked; p.settings.volume = +vol.value;
+    p.settings.music = music.checked; p.settings.musicVolume = +mvol.value; p.settings.intro = intro.checked;
     p.settings.server = server.value.trim().replace(/\/+$/, '');
     app.applyAudioSettings();
     saveProfile(p);
     if (app.lobby) { const me = app.lobby.players.find((x) => x.isProfile); if (me) me.name = p.name; }
   };
-  for (const i of [name, sound, vol, server]) i.addEventListener('change', save);
+  for (const i of [name, sound, vol, server, music, mvol, intro]) i.addEventListener('change', save);
   vol.addEventListener('input', () => { p.settings.volume = +vol.value; app.applyAudioSettings(); });
+  mvol.addEventListener('input', () => { p.settings.musicVolume = +mvol.value; app.applyAudioSettings(); });
   return el('div.screen.settings-screen', {}, [
     el('div.topbar', {}, [brandEl(app), profileBar(app)]),
     el('div.settings-body', {}, [
@@ -380,8 +381,12 @@ export function settingsScreen(app) {
         el('label.srow', {}, [el('span', { text: 'Commander name' }), name]),
         el('label.srow', {}, [el('span', { text: 'Sound effects' }), sound]),
         el('label.srow', {}, [el('span', { text: 'Volume' }), vol]),
+        el('label.srow', {}, [el('span', { text: 'Music' }), music]),
+        el('label.srow', {}, [el('span', { text: 'Music volume' }), mvol]),
+        el('label.srow', {}, [el('span', { text: 'Play intro at startup' }), intro]),
         el('label.srow', {}, [el('span', { text: 'Online relay server' }), server]),
-        el('div.srow', {}, [el('span', { text: 'Progress' }), el('button.btn.btn-danger.btn-small', { text: 'RESET PROFILE', onclick: () => app.confirm('Erase all progress, levels and unlocks?', () => { app.profile = resetProfile(); app.lobby = null; app.show('settings'); }) })]),
+        el('div.srow', {}, [el('span', { text: 'Progress' }), el('button.btn.btn-danger.btn-small', { text: 'RESET PROFILE', onclick: () => app.confirm('Erase all progress, levels and unlocks?', () => { app.profile = resetProfile(); app.lobby = null; app.applyAudioSettings(); app.show('settings'); }) })]),
+        el('div.srow', {}, [el('span', { text: 'Intro' }), el('button.btn.btn-small', { text: 'REPLAY INTRO', onclick: () => { save(); app.startIntro(); } })]),
         el('p.muted', { text: 'Progress is stored in this browser (localStorage).' }),
       ]),
       el('button.btn.btn-primary', { text: 'BACK', onclick: () => { save(); app.show('menu'); } }),

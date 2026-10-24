@@ -22,11 +22,12 @@ async function makeClient(name) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name} console: ${m.text()}`); });
   await page.goto('http://localhost:8080/', { waitUntil: 'load' });
   await page.evaluate(({ name, relay }) => {
-    const p = { name, level: 12, xp: 0, gears: 0, weaponXp: {}, weaponTier: {}, stats: {}, settings: { sound: false, volume: 0, server: relay } };
+    const p = { name, level: 12, xp: 0, gears: 0, weaponXp: {}, weaponTier: {}, stats: {}, settings: { sound: false, volume: 0, server: relay, intro: false, music: false } };
     localStorage.setItem('utg.profile.v1', JSON.stringify(p));
   }, { name, relay });
   await page.reload({ waitUntil: 'load' });
   await page.click('.start-btn');
+  await page.waitForSelector('.menu-screen', { timeout: 10000 });
   await page.click('text=PLAY ONLINE');
   await page.waitForTimeout(400);
   return page;
@@ -103,7 +104,7 @@ const left = await host.evaluate(() => window.__app.game.tanks.filter((t) => t.c
 check(left.length === 1 && left[0][1] === false, `left player destroyed: ${JSON.stringify(left)}`);
 // dev tools gate on the guest (now on menu)
 await guest.waitForSelector('.menu-screen');
-for (let i = 0; i < 5; i++) await guest.click('.brand-logo');
+for (let i = 0; i < 5; i++) await guest.click('.profile-bar .avatar');
 await guest.waitForSelector('.modal-box.gate');
 await guest.fill('.modal-box.gate input', 'wrong');
 await guest.press('.modal-box.gate input', 'Enter');

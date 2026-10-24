@@ -9,7 +9,7 @@ export function defaultProfile() {
     level: 1, xp: 0, gears: 0,
     weaponXp: {}, weaponTier: {},
     stats: { games: 0, wins: 0, kills: 0, damage: 0, shots: 0 },
-    settings: { sound: true, volume: 0.7 },
+    settings: { sound: true, volume: 0.7, music: true, musicVolume: 0.6, intro: true },
     created: Date.now(),
   };
 }
@@ -82,7 +82,7 @@ export function applyGameResults(p, { xp, kills, damage, shots, won, mastery }) 
   const summary = { xp, gears: 0, levelUps: [], unlocks: [], masteryUps: [], before: p.level };
   p.stats.games++; if (won) p.stats.wins++;
   p.stats.kills += kills; p.stats.damage += Math.round(damage); p.stats.shots += shots;
-  const gears = 20 + kills * 10 + (won ? 40 : 0) + Math.round(damage / 10);
+  const gears = 8 + kills * 3 + (won ? 12 : 0) + Math.round(damage / 30);
   p.gears += gears; summary.gears = gears;
   p.xp += Math.round(xp);
   while (p.level < MAX_LEVEL && p.xp >= xpForLevel(p.level)) {

@@ -68,7 +68,7 @@ export default {
 function freshState(code = '') {
   return {
     code, phase: 'empty', hostId: null, players: {}, order: [], bots: {},
-    settings: { mode: 'deathmatch', hp: 100, wind: 'low', turnTime: 30, tracers: true, items: true, crates: true, difficulty: 'Normal', arsenal: 'unlocked', map: 'random' },
+    settings: { mode: 'deathmatch', hp: 100, wind: 'low', turnTime: 30, tracers: true, items: true, crates: true, difficulty: 'Normal', arsenal: 'unlocked', map: 'random', balance: true },
     isPublic: true, seed: 0, round: 0, locks: {}, done: {}, left: [], hostSnapshot: null, deadline: null,
     created: Date.now(), updated: Date.now(),
   };
@@ -186,7 +186,7 @@ export class Room {
       case 'ready': p.ready = !!msg.ready; break;
       case 'settings': {
         if (!isHost || !msg.settings || typeof msg.settings !== 'object') return;
-        const allowed = ['mode', 'hp', 'wind', 'turnTime', 'tracers', 'items', 'crates', 'difficulty', 'arsenal', 'map'];
+        const allowed = ['mode', 'hp', 'wind', 'turnTime', 'tracers', 'items', 'crates', 'difficulty', 'arsenal', 'map', 'balance'];
         for (const k of allowed) if (k in msg.settings) s.settings[k] = typeof msg.settings[k] === 'string' ? clampStr(msg.settings[k], 24) : msg.settings[k];
         break;
       }

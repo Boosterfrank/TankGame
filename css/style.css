@@ -422,3 +422,12 @@ button.pl-ready:not(.not) { animation: pop 0.35s ease-out both; }
 .menu-screen { background: linear-gradient(90deg, rgba(5,8,13,0.74), rgba(5,8,13,0.18)); }
 .hub-title { animation: none; text-shadow: 0 0 calc(24px + var(--bass, 0) * 70px) rgba(57,208,255, calc(0.45 + var(--bass, 0) * 0.55)), 0 5px 0 #0b3b5a, 0 10px 24px rgba(0,0,0,0.8); }
 .hub-title span:nth-child(2) { color: var(--cyan); filter: brightness(calc(1 + var(--bass, 0) * 0.6)); }
+
+/* ======================================================================
+   Aiming readout, weapon search, level balance
+   ====================================================================== */
+.aim-group b { min-width: 58px; font-size: 20px; letter-spacing: 0.02em; }
+.profile-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.profile-right .balance { font-size: 12px; letter-spacing: 0.1em; color: var(--yellow); min-height: 14px; }
+.ov-head .wsearch { font-size: 20px; padding: 6px 12px; background: rgba(0,0,0,0.45); border: 1px solid var(--line2); color: #fff; width: 320px; font-family: inherit; }
+.ov-head .wsearch::placeholder { color: var(--muted); }

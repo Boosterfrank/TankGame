@@ -62,4 +62,5 @@ export const DEFAULT_SETTINGS = {
   difficulty: 'Normal',
   arsenal: 'unlocked',     // 'unlocked' | 'all'
   crates: true,
+  balance: true,           // level handicap: higher-level players deal less damage to lower-level ones
 };

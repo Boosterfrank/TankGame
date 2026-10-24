@@ -177,7 +177,7 @@ export class Intro {
     ctx.translate(WORLD_W / 2 + sx, WORLD_H / 2 + sy);
     ctx.scale(cam.z, cam.z);
     ctx.translate(-cam.x, -cam.y);
-    ctx.drawImage(renderer.bg, -40, -20, WORLD_W + 80, WORLD_H + 40);
+    renderer.drawSky(ctx, this.t, -40, -20, 1.045);
     this.terrain.draw(ctx);
     for (const tk of [this.green, this.red]) if (tk.x > -60 && tk.x < WORLD_W + 60) renderer.drawTankBody(ctx, tk, tk === this.green ? '#4cff5e' : '#ff4b4b', this.t);
     if (this.shell && !this.shell.dead) this.shell.draw(ctx);

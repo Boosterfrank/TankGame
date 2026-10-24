@@ -4,6 +4,7 @@ import { PHYS } from '../config.js';
 import { iconURL } from '../icons.js';
 import { getWeapon, FAMILY_BY_ID } from '../weapons.js';
 import { ITEMS } from '../items.js';
+import { drawTankSprite } from '../tanksprite.js';
 
 export class HUD {
   constructor(app) {
@@ -22,7 +23,7 @@ export class HUD {
       <div class="hud-panel hud-profile">
         <div class="bar armor"><div class="fill"></div><span class="label">0 / 50 Armor</span></div>
         <div class="bar hp"><div class="fill"></div><span class="label">100 / 100 HP</span></div>
-        <div class="profile-bottom"><canvas class="tank-icon" width="92" height="48"></canvas><span class="xp">+0 XP</span></div>
+        <div class="profile-bottom"><canvas class="tank-icon" width="92" height="52"></canvas><div class="profile-right"><span class="xp">+0 XP</span><span class="balance"></span></div></div>
       </div>
       <div class="hud-panel hud-fuel">
         <canvas class="gauge" width="140" height="96"></canvas>
@@ -73,14 +74,7 @@ export class HUD {
   drawTankIcon(color = '#4cff5e') {
     const c = this.q('.tank-icon'), x = c.getContext('2d');
     x.clearRect(0, 0, c.width, c.height);
-    x.save(); x.translate(46, 40); x.scale(1.5, 1.5);
-    x.fillStyle = '#14181d'; x.beginPath(); x.roundRect ? x.roundRect(-15, -7, 30, 7, 3.5) : x.rect(-15, -7, 30, 7); x.fill();
-    x.fillStyle = '#2c333b'; for (const wx of [-10, -3.5, 3.5, 10]) { x.beginPath(); x.arc(wx, -3.5, 2.2, 0, Math.PI * 2); x.fill(); }
-    x.fillStyle = color; x.beginPath(); x.moveTo(-14, -7); x.lineTo(14, -7); x.lineTo(11, -12); x.lineTo(-11, -12); x.closePath(); x.fill();
-    x.beginPath(); x.arc(0, -12, 5.5, Math.PI, 0); x.fill();
-    x.strokeStyle = color; x.lineWidth = 2.5; x.lineCap = 'round';
-    x.beginPath(); x.moveTo(0, -13); x.lineTo(14, -20); x.stroke();
-    x.restore();
+    drawTankSprite(x, { x: 46, y: 50, color, angle: 30, scale: 1.45 });
   }
 
   show() {
@@ -132,7 +126,8 @@ export class HUD {
       this.q('.mode-desc').textContent = m === 'team' ? 'Eliminate the other teams' : 'Destroy your opponents';
     });
     this.set('urgent', !!(cur && !cur.locked && game.phase === 'aim' && game.settings.turnTime > 0 && game.turnTimer < 6), (v) => { this.q('.hud-fire').classList.toggle('urgent', v); });
-    this.set('angle', Math.round(t.angle), (v) => { this.q('.aim-angle').textContent = `${v}°`; });
+    this.set('angle', `${Math.round(t.displayAngle)}|${t.facing}`, (v) => { const [d, f] = v.split('|'); this.q('.aim-angle').innerHTML = +f < 0 ? `&#9664;${d}&deg;` : `${d}&deg;&#9654;`; });
+    this.set('balance', Math.round((game.balanceFor(t) - 1) * 100), (v) => { this.q('.balance').textContent = v ? `BALANCE ${v > 0 ? '+' : ''}${v}% DMG` : ''; });
     this.set('power', Math.round(t.power), (v) => { this.q('.aim-power').textContent = v; });
     this.set('canAct', !!(cur && !cur.locked && game.phase === 'aim'), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
     if (this.overlayMode === 'weapons' && this.overlayTank !== t) this.renderWeapons(game, t);
@@ -174,10 +169,11 @@ export class HUD {
     const t = game?.current;
     if (!game || !t || t.locked || game.phase !== 'aim') return;
     this.overlayMode = mode;
+    this.query = '';
     this.overlay.classList.remove('hidden');
     this.el.classList.toggle('wep-open', mode === 'weapons');
     this.el.classList.toggle('items-open', mode === 'items');
-    if (mode === 'weapons') this.renderWeapons(game, t); else this.renderItems(game, t);
+    if (mode === 'weapons') { this.renderWeapons(game, t); this.overlay.querySelector('.wsearch')?.focus(); } else this.renderItems(game, t);
     this.app.audio.play('click');
   }
 
@@ -190,7 +186,8 @@ export class HUD {
 
   renderWeapons(game, t) {
     this.overlayTank = t;
-    const ids = [...t.arsenal.keys()].sort((a, b) => FAMILY_BY_ID[a].name.localeCompare(FAMILY_BY_ID[b].name));
+    const q = (this.query || '').toLowerCase();
+    const ids = [...t.arsenal.keys()].filter((id) => !q || FAMILY_BY_ID[id].name.toLowerCase().includes(q)).sort((a, b) => FAMILY_BY_ID[a].name.localeCompare(FAMILY_BY_ID[b].name));
     const perPage = 63;
     const pages = Math.max(1, Math.ceil(ids.length / perPage));
     this.page = Math.min(this.page, pages - 1);
@@ -211,7 +208,21 @@ export class HUD {
     this.overlay.innerHTML = '';
     const prev = el('button.pager.prev', { html: '&#9664;', disabled: this.page === 0, onclick: () => { this.page--; this.renderWeapons(game, t); } });
     const next = el('button.pager.next', { html: '&#9654;', disabled: this.page >= pages - 1, onclick: () => { this.page++; this.renderWeapons(game, t); } });
-    const head = el('div.ov-head', {}, [el('span', { text: `WEAPONS` }), el('small', { text: `${ids.filter((i) => t.ammo(i) > 0).length} ready · page ${this.page + 1}/${pages} · Esc to close` })]);
+    const search = el('input.wsearch', { type: 'search', placeholder: 'Search weapons…', value: this.query || '', spellcheck: false, autocomplete: 'off' });
+    search.addEventListener('input', () => {
+      this.query = search.value;
+      this.page = 0;
+      this.renderWeapons(game, t);
+      const n = this.overlay.querySelector('.wsearch');
+      if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
+    });
+    search.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { if (search.value) { this.query = ''; this.renderWeapons(game, t); this.overlay.querySelector('.wsearch')?.focus(); } else this.closeOverlay(); }
+      if (e.key === 'Enter') { const first = slice.find((id) => t.ammo(id) > 0); if (first) { game.selectWeapon(first); this.closeOverlay(); } }
+    });
+    const head = el('div.ov-head', {}, [el('span', { text: `WEAPONS` }), search, el('small', { text: `${ids.filter((i) => t.ammo(i) > 0).length} ready · page ${this.page + 1}/${pages} · Esc to close` })]);
+    if (!slice.length) grid.append(el('div.muted.room-empty', { text: q ? `No weapons match "${this.query}"` : 'No weapons' }));
     this.overlay.append(head, prev, grid, next);
   }
 

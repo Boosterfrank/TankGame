@@ -40,14 +40,17 @@ export class Tank {
   }
 
   get cy() { return this.y - 12; }
-  get facing() { return this.angle > 90 ? -1 : 1; }
+  // Angle runs from -90 (straight down, facing right) through 90 (up) to 270 (straight down, facing left).
+  get facing() { return this.angle > 90 && this.angle <= 270 ? -1 : 1; }
+  // Signed angle relative to the facing direction, as ShellShock shows it (-90..90).
+  get displayAngle() { return this.facing > 0 ? this.angle : 180 - this.angle; }
 
-  pivot() { return { x: this.x, y: this.y - 17 }; }
+  pivot() { return { x: this.x, y: this.y - 23 }; }
 
   barrelTip() {
     const p = this.pivot();
     const a = (this.angle * Math.PI) / 180;
-    return { x: p.x + Math.cos(a) * 25, y: p.y - Math.sin(a) * 25 };
+    return { x: p.x + Math.cos(a) * 28, y: p.y - Math.sin(a) * 28 };
   }
 
   ammo(id) { return this.arsenal.get(id) ?? 0; }

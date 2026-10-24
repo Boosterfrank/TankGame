@@ -33,7 +33,7 @@ export class App {
     this.game = null;
     this.lobby = null;
     this.screenName = null;
-    this.input = { keys: new Set(), drag: null, moveBtn: 0 };
+    this.input = { keys: new Set(), drag: null, moveBtn: 0, holds: new Map() };
     this.timeScale = 1;
     this.lastTs = 0;
     this.time = 0;
@@ -202,7 +202,7 @@ export class App {
   startGame(config) {
     this.lastGameConfig = config;
     const ids = unlockedIds(this.profile), tiers = allTiers(this.profile);
-    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers });
+    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers, level: this.profile.level });
     this.show(null);
     this.audio.init();
     this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio, online: config.online || null, deadline: config.deadline || null });
@@ -304,6 +304,7 @@ export class App {
       this.input.keys.add(e.code);
       if (!g) return;
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
+      if (!e.repeat && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) { this.aimKey(e.code, 1, e.shiftKey); this.input.holds.set(e.code, { t: 0, acc: 0 }); }
       if (e.code === 'Enter' && g.online) { if (this.hud.overlayMode) this.hud.closeOverlay(); this.openChat(); }
       else if (e.code === 'Space' || e.code === 'Enter') { if (this.hud.overlayMode) this.hud.closeOverlay(); else this.fire(); }
       else if (e.code === 'Backquote') { this.dev.toggle(); }
@@ -312,8 +313,8 @@ export class App {
       else if (e.code === 'KeyQ') { g.cycleWeapon(-1); }
       else if (e.code === 'Escape') { if (this.hud.overlayMode) this.hud.closeOverlay(); else if (!this.modal.classList.contains('hidden')) this.closeModal(); else this.confirmLeave(); }
     });
-    window.addEventListener('keyup', (e) => this.input.keys.delete(e.code));
-    window.addEventListener('blur', () => this.input.keys.clear());
+    window.addEventListener('keyup', (e) => { this.input.keys.delete(e.code); this.input.holds.delete(e.code); });
+    window.addEventListener('blur', () => { this.input.keys.clear(); this.input.holds.clear(); });
 
     const toWorld = (e) => {
       const r = this.canvas.getBoundingClientRect();
@@ -335,7 +336,7 @@ export class App {
       const g = this.game;
       if (!g || !g.current) return;
       e.preventDefault();
-      g.adjustPower(e.deltaY < 0 ? 2 : -2);
+      g.adjustPower(e.deltaY < 0 ? 1 : -1);
     }, { passive: false });
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -348,20 +349,36 @@ export class App {
     const dx = pt.x - p.x, dy = p.y - pt.y;
     const d = Math.hypot(dx, dy);
     if (d < 8) return;
-    const angle = clamp(deg(Math.atan2(dy, dx)), 0, 180);
-    const power = clamp((d - 30) / 3.6, 5, 100);
+    let angle = deg(Math.atan2(dy, dx));
+    if (angle < -90) angle += 360;
+    const power = clamp((d - 34) / 1.96, 5, 100);
     g.setAim(angle, power);
+  }
+
+  // One aim step per key press; holding repeats with acceleration (Shift = 5 per step).
+  aimKey(code, n, shift) {
+    const g = this.game;
+    if (!g || g.phase !== 'aim' || !g.current || g.current.locked || g.waitingPass) return;
+    const step = (shift ? 5 : 1) * n;
+    if (code === 'ArrowLeft') g.adjustAngle(step);
+    else if (code === 'ArrowRight') g.adjustAngle(-step);
+    else if (code === 'ArrowUp') g.adjustPower(step);
+    else if (code === 'ArrowDown') g.adjustPower(-step);
   }
 
   handleHeldKeys(dt) {
     const g = this.game;
     if (!g || g.phase !== 'aim' || !g.current || g.current.locked || g.waitingPass) return;
     const k = this.input.keys;
-    const fine = k.has('ShiftLeft') || k.has('ShiftRight') ? 0.25 : 1;
-    if (k.has('ArrowLeft')) g.adjustAngle(45 * fine * dt);
-    if (k.has('ArrowRight')) g.adjustAngle(-45 * fine * dt);
-    if (k.has('ArrowUp')) g.adjustPower(35 * fine * dt);
-    if (k.has('ArrowDown')) g.adjustPower(-35 * fine * dt);
+    const shift = k.has('ShiftLeft') || k.has('ShiftRight');
+    for (const [code, h] of this.input.holds) {
+      h.t += dt;
+      if (h.t < 0.35) continue;
+      const rate = h.t < 1.2 ? 12 : h.t < 2.5 ? 30 : 60;
+      h.acc += rate * dt;
+      const n = Math.floor(h.acc);
+      if (n > 0) { h.acc -= n; this.aimKey(code, n, shift); }
+    }
     const mv = (k.has('KeyA') ? -1 : 0) + (k.has('KeyD') ? 1 : 0) + this.input.moveBtn;
     if (mv) g.moveCurrent(Math.sign(mv), dt);
   }

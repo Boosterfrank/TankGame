@@ -60,6 +60,11 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
   gaining damage, blast radius and extra shells. Gears (earned per game) can buy a tier early.
 - **Flares.** Air-support weapons (Rain, Meteor Shower, Airstrike, Solar Flare and friends) fire a
   marker flare that bounces to a stop; the strike lands exactly where the flare rests.
+- **Level balance.** Higher-level tanks deal up to 40% less damage to lower-level ones and
+  lower-level tanks deal up to 30% more, scaled by the level gap (lobby setting, on by default).
+  The HUD shows your current modifier against the weakest enemy.
+- **Aiming guide.** A translucent range circle around your tank with a wedge whose length is your
+  power, and a "power, angle" readout under the tank.
 - **Items** (repair, shield, teleport, double damage, fuel, ammo) never end your turn.
 - **Supply drops** parachute in; drive into them for weapons you may not even have unlocked.
 - Deathmatch or Team Battle, 100–300 HP, five wind levels, turn timers, bot difficulty,
@@ -69,12 +74,12 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
 
 | Input | Action |
 | --- | --- |
-| `←` `→` | Aim the barrel (hold `Shift` for fine control) |
-| `↑` `↓` / mouse wheel | Power |
+| `←` `→` | Aim: one degree per tap, hold to accelerate (`Shift` = 5 per step). Aim runs from straight down on one side, over the top, to straight down on the other |
+| `↑` `↓` / mouse wheel | Power, one point per step |
 | `A` `D` | Drive (uses fuel) |
 | Mouse drag on the battlefield | Aim from your tank toward the pointer |
 | `Space` / `Enter` | Fire (lock in your shot) |
-| `Tab` / `W` | Weapons grid |
+| `Tab` / `W` | Weapons grid (start typing to search, Enter picks the first match) |
 | `E` | Items |
 | `Esc` | Close panel / leave game |
 
@@ -109,7 +114,8 @@ src/game.js           round/turn state machine, explosions, spawning, crates, sc
 src/terrain.js        destructible terrain (bitmask + layered canvas rendering)
 src/terrain-gen.js    heightmap generators for the map styles
 src/ai.js             bot aiming (trajectory search) and loadouts
-src/render.js         background, tanks, projectiles, in-world overlays
+src/render.js         sky, fog, tanks, projectiles, aiming guide, in-world overlays
+src/tanksprite.js     procedural tank sprite shared by game, intro, HUD and lobby
 src/fx.js             particles, explosions, beams, floating text, screen shake
 src/audio.js          procedural WebAudio sound effects
 src/profile.js        localStorage profile: XP, levels, gears, mastery

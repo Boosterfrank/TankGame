@@ -409,9 +409,26 @@ export class Game {
   }
 
   // ------------------------------------------------------------ player actions
-  adjustAngle(d) { const t = this.current; if (t && !t.locked) t.angle = clamp(t.angle + d, 0, 180); }
-  adjustPower(d) { const t = this.current; if (t && !t.locked) t.power = clamp(t.power + d, 5, 100); }
-  setAim(angle, power) { const t = this.current; if (t && !t.locked) { t.angle = clamp(angle, 0, 180); t.power = clamp(power, 5, 100); } }
+  adjustAngle(d) { const t = this.current; if (t && !t.locked) t.angle = clamp(Math.round(t.angle + d), -90, 270); }
+  adjustPower(d) { const t = this.current; if (t && !t.locked) t.power = clamp(Math.round(t.power + d), 5, 100); }
+  setAim(angle, power) { const t = this.current; if (t && !t.locked) { t.angle = clamp(Math.round(angle), -90, 270); t.power = clamp(Math.round(power), 5, 100); } }
+
+  // Level balance: higher-level attackers deal less to lower-level targets, and vice versa.
+  balanceMult(attacker, victim) {
+    if (this.settings.balance === false) return 1;
+    const diff = (attacker.level || 1) - (victim.level || 1);
+    if (diff > 0) return 1 - Math.min(0.4, diff * 0.012);
+    if (diff < 0) return 1 + Math.min(0.3, -diff * 0.01);
+    return 1;
+  }
+
+  // Multiplier a tank gets against its lowest-level living enemy (shown in the HUD).
+  balanceFor(tank) {
+    const enemies = this.tanks.filter((o) => o.alive && o.team !== tank.team);
+    if (!enemies.length) return 1;
+    const low = enemies.reduce((m, o) => Math.min(m, o.level || 1), 99);
+    return this.balanceMult(tank, { level: low });
+  }
   moveCurrent(dir, dt) {
     const t = this.current;
     if (!t || t.locked || this.phase !== 'aim' || this.waitingPass) return;
@@ -624,6 +641,7 @@ export class Game {
   applyDamage(t, amount, owner, famId, environmental = false, pierce = false) {
     if (!t.alive || amount <= 0) return 0;
     if (this.dev?.god && t.isProfile) { this.fx.text(t.x, t.cy - 34, 'GOD', '#ffd740'); return 0; }
+    if (owner && owner !== t && owner.team !== t.team) amount = Math.max(1, Math.round(amount * this.balanceMult(owner, t)));
     const dealt = t.takeDamage(amount, pierce);
     const hostile = owner && owner !== t && owner.team !== t.team;
     this.fx.text(t.x, t.cy - 34, `-${Math.round(dealt)}`, hostile || environmental ? '#ff5252' : '#ffab40', 22 + Math.min(14, dealt / 5));

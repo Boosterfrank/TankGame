@@ -6,6 +6,7 @@ import { FAMILIES, FAMILY_BY_ID, CATEGORIES, TOTAL_WEAPONS, getWeapon, describeS
 import { MAP_STYLES, generateHeights, spawnColumns } from '../terrain-gen.js';
 import { Terrain } from '../terrain.js';
 import { xpForLevel, unlockedFamilies, weaponTier, upgradeCost, buyUpgrade, nextMasteryXp, resetProfile, saveProfile } from '../profile.js';
+import { drawTankSprite } from '../tanksprite.js';
 
 const TIPS = [
   'Hold Shift while using the arrow keys for fine aiming.',
@@ -106,6 +107,7 @@ export const SETTING_DEFS = [
   { key: 'crates', label: 'Supply Drops', values: [[true, 'On'], [false, 'Off']] },
   { key: 'difficulty', label: 'Bot Skill', values: [['Easy', 'Easy'], ['Normal', 'Normal'], ['Hard', 'Hard']] },
   { key: 'arsenal', label: 'Weapons', values: [['unlocked', 'Unlocked only'], ['all', 'Everything']] },
+  { key: 'balance', label: 'Level Balance', values: [[true, 'On'], [false, 'Off']] },
 ];
 
 export function newLobby(app) {
@@ -227,17 +229,10 @@ export function lobbyScreen(app) {
   return s;
 }
 
-export function drawMiniTank(c, color, scale = 1.2) {
+export function drawMiniTank(c, color, scale = 1.1) {
   const x = c.getContext('2d');
   x.clearRect(0, 0, c.width, c.height);
-  x.save(); x.translate(c.width / 2, c.height - 8); x.scale(scale, scale);
-  x.fillStyle = '#14181d'; x.beginPath(); x.roundRect ? x.roundRect(-15, -7, 30, 7, 3.5) : x.rect(-15, -7, 30, 7); x.fill();
-  x.fillStyle = '#2c333b'; for (const wx of [-10, -3.5, 3.5, 10]) { x.beginPath(); x.arc(wx, -3.5, 2.2, 0, Math.PI * 2); x.fill(); }
-  x.fillStyle = color; x.beginPath(); x.moveTo(-14, -7); x.lineTo(14, -7); x.lineTo(11, -12); x.lineTo(-11, -12); x.closePath(); x.fill();
-  x.beginPath(); x.arc(0, -12, 5.5, Math.PI, 0); x.fill();
-  x.strokeStyle = color; x.lineWidth = 2.5; x.lineCap = 'round';
-  x.beginPath(); x.moveTo(0, -13); x.lineTo(14, -20); x.stroke();
-  x.restore();
+  drawTankSprite(x, { x: c.width / 2, y: c.height - 3, color, angle: 22, scale });
 }
 
 // ---------------------------------------------------------------- Armory

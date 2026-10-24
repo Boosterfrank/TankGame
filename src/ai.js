@@ -123,7 +123,8 @@ export function planBotShot(game, bot) {
     if (losClear(game, bot, target)) {
       const tip = bot.barrelTip();
       let ang = Math.atan2(-(target.cy - tip.y), target.x - tip.x) * 180 / Math.PI;
-      ang = clamp(ang, 0, 180);
+      if (ang < -90) ang += 360;
+      ang = clamp(ang, -90, 270);
       const jitter = diff === 'Hard' ? 1 : diff === 'Normal' ? 3 : 7;
       return { weaponId: weapon.id, angle: ang + (Math.random() - 0.5) * jitter, power: 100 };
     }

@@ -5,7 +5,7 @@ export const VERSION = '0.2.0';
 
 // Default relay server for online play (a deployed worker/ URL, e.g. https://unnamed-tank-game-relay.<you>.workers.dev).
 // Players can override it in Settings; leave empty to hide online play until configured.
-export const ONLINE_SERVER = 'tankgame.qubiplex.workers.dev';
+export const ONLINE_SERVER = 'https://tankgame.qubiplex.workers.dev/';
 
 // The whole UI is designed at 1920x1080 and scaled to fit the window.
 export const DESIGN_W = 1920;

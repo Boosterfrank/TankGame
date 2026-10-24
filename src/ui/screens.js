@@ -179,10 +179,10 @@ export function lobbyScreen(app) {
     } else addRow.append(el('span.muted', { text: 'Lobby full (8 players)' }));
 
     // right column
-    const preview = el('canvas.map-preview', { width: 420, height: 230 });
+    const preview = el('canvas.map-preview', { width: 420, height: 180 });
     const { heights, style } = generateHeights(L.settings.map, L.seed, WORLD_W, WORLD_H);
     const cols = spawnColumns(L.players.length, WORLD_W, new RNG(L.seed));
-    Terrain.drawPreview(preview.getContext('2d'), heights, WORLD_W, WORLD_H, 420, 230, cols);
+    Terrain.drawPreview(preview.getContext('2d'), heights, WORLD_W, WORLD_H, 420, 180, cols);
     const mapName = MAP_STYLES.find((m) => m.id === L.settings.map);
     const mapCard = el('div.card.map-card', {}, [
       el('div.map-head', {}, [
@@ -353,19 +353,18 @@ export function settingsScreen(app) {
   const sound = el('input', { type: 'checkbox', checked: p.settings.sound });
   const vol = el('input', { type: 'range', min: 0, max: 1, step: 0.05, value: p.settings.volume });
   const server = el('input.server-input', { type: 'text', value: p.settings.server || '', placeholder: 'https://your-relay.workers.dev', spellcheck: false });
-  const music = el('input', { type: 'checkbox', checked: p.settings.music !== false });
   const mvol = el('input', { type: 'range', min: 0, max: 1, step: 0.05, value: p.settings.musicVolume ?? 0.6 });
   const intro = el('input', { type: 'checkbox', checked: p.settings.intro !== false });
   const save = () => {
     p.name = name.value.trim() || 'Commander';
     p.settings.sound = sound.checked; p.settings.volume = +vol.value;
-    p.settings.music = music.checked; p.settings.musicVolume = +mvol.value; p.settings.intro = intro.checked;
+    p.settings.musicVolume = +mvol.value; p.settings.intro = intro.checked;
     p.settings.server = server.value.trim().replace(/\/+$/, '');
     app.applyAudioSettings();
     saveProfile(p);
     if (app.lobby) { const me = app.lobby.players.find((x) => x.isProfile); if (me) me.name = p.name; }
   };
-  for (const i of [name, sound, vol, server, music, mvol, intro]) i.addEventListener('change', save);
+  for (const i of [name, sound, vol, server, mvol, intro]) i.addEventListener('change', save);
   vol.addEventListener('input', () => { p.settings.volume = +vol.value; app.applyAudioSettings(); });
   mvol.addEventListener('input', () => { p.settings.musicVolume = +mvol.value; app.applyAudioSettings(); });
   return el('div.screen.settings-screen', {}, [
@@ -376,7 +375,6 @@ export function settingsScreen(app) {
         el('label.srow', {}, [el('span', { text: 'Commander name' }), name]),
         el('label.srow', {}, [el('span', { text: 'Sound effects' }), sound]),
         el('label.srow', {}, [el('span', { text: 'Volume' }), vol]),
-        el('label.srow', {}, [el('span', { text: 'Music' }), music]),
         el('label.srow', {}, [el('span', { text: 'Music volume' }), mvol]),
         el('label.srow', {}, [el('span', { text: 'Play intro at startup' }), intro]),
         el('label.srow', {}, [el('span', { text: 'Online relay server' }), server]),

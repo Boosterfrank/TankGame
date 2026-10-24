@@ -36,6 +36,9 @@ export class Tank {
     this.netId = null;
     this.connected = true;
     this.roundItems = [];
+    this.roundCrates = [];
+    this.roundDev = [];
+    this.god = false;
     this.dummy = false;
   }
 

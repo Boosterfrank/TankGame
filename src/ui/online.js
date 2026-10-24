@@ -136,9 +136,9 @@ export function onlineLobbyScreen(app) {
       const tankPrev = el('canvas.pl-tank', { width: 70, height: 40 });
       drawMiniTank(tankPrev, teamMode ? ['#4cff5e', '#4fc3ff', '#ff4b4b', '#ffd740'][pl.team - 1] : (me ? '#4cff5e' : '#ff4b4b'));
       row.append(tankPrev);
-      const ready = pl.ready || pl.id === L.hostId || pl.bot;
-      const readyEl = el('button.pl-ready', { class: `pl-ready${ready ? '' : ' not'}`, html: ready ? '&#10004;' : 'Ready?', disabled: !me || pl.id === L.hostId, title: me ? 'Toggle ready' : '' });
-      if (me && pl.id !== L.hostId) readyEl.addEventListener('click', () => session.setReady(!pl.ready));
+      const ready = pl.bot || pl.ready;
+      const readyEl = el('button.pl-ready', { class: `pl-ready${ready ? '' : ' not'}`, html: ready ? '&#10004;' : 'Ready?', disabled: !me, title: me ? 'Toggle ready' : '' });
+      if (me) readyEl.addEventListener('click', () => session.setReady(!pl.ready));
       row.append(readyEl);
       if (isHost && !me) row.append(el('button.kick', { text: 'KICK', onclick: () => session.kick(pl.id) }));
       else row.append(el('div.kick.ghost'));
@@ -154,9 +154,9 @@ export function onlineLobbyScreen(app) {
     const chatInput = el('input.chat-input', { type: 'text', placeholder: 'Type a message and press Enter', maxlength: 160, value: chatDraft });
     chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { session.sendChat(chatInput.value); chatInput.value = ''; } e.stopPropagation(); });
     // right column
-    const preview = el('canvas.map-preview', { width: 420, height: 230 });
+    const preview = el('canvas.map-preview', { width: 420, height: 180 });
     const { heights, style } = generateHeights(L.settings.map, 7, WORLD_W, WORLD_H);
-    Terrain.drawPreview(preview.getContext('2d'), heights, WORLD_W, WORLD_H, 420, 230, []);
+    Terrain.drawPreview(preview.getContext('2d'), heights, WORLD_W, WORLD_H, 420, 180, []);
     const mapName = MAP_STYLES.find((m) => m.id === L.settings.map);
     const cycleMap = (d) => { const idx = MAP_STYLES.findIndex((m) => m.id === L.settings.map); session.setSettings({ map: MAP_STYLES[(idx + d + MAP_STYLES.length) % MAP_STYLES.length].id }); };
     const mapCard = el('div.card.map-card', {}, [
@@ -182,11 +182,13 @@ export function onlineLobbyScreen(app) {
       row.addEventListener('click', () => session.setPublic(!L.isPublic));
       table.append(row);
     }
-    const humansReady = L.players.filter((p) => !p.bot && p.id !== L.hostId).every((p) => p.ready);
-    const right = el('div.lobby-right', {}, [mapCard, table,
-      isHost
-        ? el('button.btn.btn-primary.btn-big.wide', { text: L.players.length < 2 ? 'NEED 2+ TANKS' : humansReady ? 'START GAME' : 'WAITING FOR READY', disabled: L.players.length < 2 || !humansReady, onclick: () => session.start() })
-        : el('div.hotseat-note', { text: session.phase === 'post' ? 'Game over. Waiting for the host to reopen the lobby…' : 'Ready up and wait for the host to start.' }),
+    const myPl = L.players.find((p) => p.id === session.myId);
+    const notReady = L.players.filter((p) => !p.bot && !p.ready).length;
+    const status = session.startDeadline != null
+      ? el('div.start-count', { text: `STARTING IN ${Math.max(0, Math.ceil((session.startDeadline - performance.now()) / 1000))}` })
+      : el('div.hotseat-note', { text: L.players.length < 2 ? 'Need at least two tanks. Add a bot or wait for players.' : session.phase === 'post' ? 'Game over. Ready up for another round.' : myPl?.ready ? `Waiting for ${notReady} player${notReady === 1 ? '' : 's'} to ready up…` : 'Everyone readies up and the battle starts by itself.' });
+    const right = el('div.lobby-right', {}, [mapCard, table, status,
+      el('button', { class: `btn btn-big wide ${myPl?.ready ? '' : 'btn-primary'}`, text: myPl?.ready ? 'UNREADY' : 'READY', onclick: () => session.setReady(!myPl?.ready) }),
       el('button.btn.wide', { text: 'LEAVE ROOM', onclick: () => { session.leave(); app.session = null; app.show('online'); } }),
     ]);
     s.append(
@@ -207,6 +209,11 @@ export function onlineLobbyScreen(app) {
   const onChat = () => { if (s.isConnected) { const log = s.querySelector('.chat-log'); if (log) { log.innerHTML = ''; for (const c of session.chat.slice(-14)) log.append(el('div.chat-line', { class: `chat-line${c.name ? '' : ' system'}`, html: c.name ? `<b>${escapeHtml(c.name)}</b> ${escapeHtml(c.text)}` : escapeHtml(c.text) })); log.scrollTop = log.scrollHeight; } } };
   const onClose = () => { if (s.isConnected) { app.toast('Disconnected from the room', '#ff5252'); app.session = null; app.show('online'); } };
   session.on('lobby', onLobby).on('chat', onChat).on('close', onClose).on('host', onLobby).on('post', onLobby);
+  const tick = setInterval(() => {
+    if (!s.isConnected) { clearInterval(tick); return; }
+    const n = s.querySelector('.start-count');
+    if (n && session.startDeadline != null) n.textContent = `STARTING IN ${Math.max(0, Math.ceil((session.startDeadline - performance.now()) / 1000))}`;
+  }, 250);
   render();
   return s;
 }

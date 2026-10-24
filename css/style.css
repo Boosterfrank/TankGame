@@ -431,3 +431,12 @@ button.pl-ready:not(.not) { animation: pop 0.35s ease-out both; }
 .profile-right .balance { font-size: 12px; letter-spacing: 0.1em; color: var(--yellow); min-height: 14px; }
 .ov-head .wsearch { font-size: 20px; padding: 6px 12px; background: rgba(0,0,0,0.45); border: 1px solid var(--line2); color: #fff; width: 320px; font-family: inherit; }
 .ov-head .wsearch::placeholder { color: var(--muted); }
+.start-count { font-size: 34px; font-weight: 700; letter-spacing: 0.14em; color: var(--yellow); text-align: center; text-shadow: 0 0 18px rgba(255,215,64,0.6); animation: pop 0.4s ease-out both; }
+
+/* compact lobby right column so the ready controls always fit */
+.lobby-right .settings-table .srow { padding: 3px 14px; font-size: 19px; }
+.lobby-right .map-card { padding: 10px; }
+.lobby-right .map-head { margin-bottom: 6px; } .lobby-right .map-head b { font-size: 20px; }
+.lobby-right .map-desc { margin-top: 4px; font-size: 14px; }
+.lobby-right .hotseat-note { font-size: 16px; line-height: 1.3; }
+.start-count { font-size: 30px; }

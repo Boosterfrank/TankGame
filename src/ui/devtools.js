@@ -2,7 +2,7 @@
 // Open the gate by clicking the profile avatar in the top bar five times quickly; once unlocked,
 // the ` key or the DEV button toggles the panel.
 import { el, sha256, clamp, fmt } from '../util.js';
-import { FAMILIES, FAMILY_BY_ID, getWeapon } from '../weapons.js';
+import { FAMILIES, ALL_FAMILIES, FAMILY_BY_ID, getWeapon } from '../weapons.js';
 import { saveProfile, resetProfile, MAX_LEVEL } from '../profile.js';
 import { MAP_STYLES } from '../terrain-gen.js';
 import { DEFAULT_SETTINGS, BOT_NAMES, WORLD_W, PHYS } from '../config.js';
@@ -92,6 +92,7 @@ export class DevTools {
     this.frames++; this.fpsT += dt;
     if (this.fpsT >= 0.5) { this.fps = Math.round(this.frames / this.fpsT); this.frames = 0; this.fpsT = 0; }
     if (this.flags.infFuel && game?.me) game.me.fuel = PHYS.maxFuel;
+    if (game?.me && game.me.god !== !!this.flags.god) game.me.god = !!this.flags.god;
     if (!this.open) return;
     this.statT += dt;
     if (this.statT > 0.25) { this.statT = 0; this.refreshStats(game); }
@@ -148,7 +149,7 @@ export class DevTools {
 
     // game cheats
     const gameControls = [
-      el('div.dev-grid', {}, [toggle('god', 'God mode'), toggle('infAmmo', 'Infinite ammo'), toggle('infFuel', 'Infinite fuel'), toggle('noTimer', 'Freeze turn timer'), toggle('debug', 'Debug overlay'), toggle('hitboxes', 'Hitboxes'), toggle('revealAims', 'Reveal bot aims')]),
+      el('div.dev-grid', {}, [toggle('god', 'God mode'), toggle('infAmmo', 'Infinite ammo'), toggle('infFuel', 'Infinite fuel'), g?.online ? null : toggle('noTimer', 'Freeze turn timer'), toggle('debug', 'Debug overlay'), toggle('hitboxes', 'Hitboxes'), toggle('revealAims', 'Reveal bot aims')]),
     ];
     const ts = el('input', { type: 'range', min: 0.1, max: 4, step: 0.1, value: this.flags.timeScale });
     const tsLabel = el('span', { text: `${this.flags.timeScale.toFixed(1)}x` });
@@ -157,22 +158,23 @@ export class DevTools {
     if (g) {
       const me = g.me;
       const windIn = num(g.wind, -12, 12, 0.5);
-      const wepSel = el('select.dev-select', {}, FAMILIES.slice().sort((a, b) => a.name.localeCompare(b.name)).map((f) => el('option', { value: f.id, text: f.name })));
+      const online = !!g.online;
+      const wepSel = el('select.dev-select', {}, ALL_FAMILIES.slice().sort((a, b) => a.name.localeCompare(b.name)).map((f) => el('option', { value: f.id, text: f.dev ? `${f.name} (dev)` : f.name })));
       const mapSel = el('select.dev-select', {}, MAP_STYLES.map((m) => el('option', { value: m.id, text: m.name, selected: m.id === g.terrain.styleId })));
       gameControls.push(
         el('div.dev-row', {}, [
-          btn('HEAL ME', () => { if (me) { me.hp = me.maxHp; me.armor = PHYS.maxArmor; } }),
-          btn('KILL ENEMIES', () => { for (const t of g.tanks) if (t.alive && t !== me && t.team !== me?.team) g.killTank(t, me); }),
-          btn('WIN NOW', () => { for (const t of g.tanks) if (t.alive && t.team !== me?.team) g.killTank(t, me); if (g.phase === 'aim') { g.projectiles.length = 0; g.finish(); } }),
-          btn('END VOLLEY', () => { if (g.phase === 'fire') { g.projectiles.length = 0; g.spawnQueue.length = 0; g.skyLasers.length = 0; } }),
-          btn('SKIP TURN', () => { if (g.phase === 'aim' && !g.online) { for (const t of g.tanks) if (!t.isBot && t.alive && !t.locked) { t.shot = null; t.locked = true; } g.current = null; g.waitingPass = false; g.planNextBot(true); g.beginFire(); } }),
+          btn('HEAL ME', () => g.devOp({ type: 'heal' })),
+          btn('KILL ENEMIES', () => g.devOp({ type: 'kill' })),
+          btn('WIN NOW', () => { g.devOp({ type: 'kill' }); if (!online && g.phase === 'aim') { g.projectiles.length = 0; g.finish(); } }),
+          online ? null : btn('END VOLLEY', () => { if (g.phase === 'fire') { g.projectiles.length = 0; g.spawnQueue.length = 0; g.skyLasers.length = 0; } }),
+          online ? null : btn('SKIP TURN', () => { if (g.phase === 'aim') { for (const t of g.tanks) if (!t.isBot && t.alive && !t.locked) { t.shot = null; t.locked = true; } g.current = null; g.waitingPass = false; g.planNextBot(true); g.beginFire(); } }),
         ]),
-        el('div.dev-row', {}, [el('span', { text: 'Wind' }), windIn, btn('SET', () => { g.wind = clamp(+windIn.value || 0, -12, 12); })]),
-        el('div.dev-row', {}, [wepSel, btn('+5 AMMO', () => { if (me) { me.addAmmo(wepSel.value, 5); if (!me.tiers[wepSel.value]) me.tiers[wepSel.value] = 1; me.weaponId = wepSel.value; } }), btn('ALL +1', () => { if (me) for (const f of FAMILIES) { if (!me.tiers[f.id]) me.tiers[f.id] = 1; me.addAmmo(f.id, 1); } })]),
-        el('div.dev-row', {}, [btn('CRATE HERE', () => { if (me) g.spawnCrate(clamp(me.x + 80 * me.facing, 60, WORLD_W - 60)); }), btn('REPAIR CRATE', () => { if (me) g.spawnCrate(clamp(me.x - 80 * me.facing, 60, WORLD_W - 60), 'health'); }), btn('ALL ITEMS', () => { if (me) for (const k of Object.keys(me.items)) me.items[k] = 3; })]),
-        el('div.dev-row', {}, [mapSel, btn('REGEN TERRAIN', () => { if (g.online) return; g.terrain.generate(mapSel.value, Math.floor(Math.random() * 1e9)); g.crates.length = 0; for (const t of g.tanks) { t.y = g.terrain.surfaceY(t.x, 0) - 120; t.onGround = false; } this.note('terrain regenerated'); })]),
+        el('div.dev-row', {}, [el('span', { text: 'Wind' }), windIn, btn('SET', () => g.devOp({ type: 'wind', v: clamp(+windIn.value || 0, -12, 12) }))]),
+        el('div.dev-row', {}, [wepSel, btn('+5 AMMO', () => { if (me) { me.addAmmo(wepSel.value, 5); if (!me.tiers[wepSel.value]) me.tiers[wepSel.value] = 1; me.weaponId = wepSel.value; } }), btn('ALL +1', () => { if (me) for (const f of FAMILIES) { if (!me.tiers[f.id]) me.tiers[f.id] = 1; me.addAmmo(f.id, 1); } }), btn('H-BOMB', () => { if (me) { me.addAmmo('hbomb', 1); me.tiers.hbomb = 1; me.weaponId = 'hbomb'; } }, 'danger')]),
+        el('div.dev-row', {}, [btn('CRATE HERE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 80 * me.facing), 60, WORLD_W - 60), kind: 'weapon' }); }), btn('REPAIR CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x - 80 * me.facing), 60, WORLD_W - 60), kind: 'health' }); }), btn('ALL ITEMS', () => { if (me) for (const k of Object.keys(me.items)) me.items[k] = 3; })]),
+        el('div.dev-row', {}, [mapSel, btn('REGEN TERRAIN', () => { g.devOp({ type: 'terrain', style: mapSel.value, seed: Math.floor(Math.random() * 1e9) }); this.note('terrain regenerated'); })]),
       );
-      if (g.online) gameControls.push(el('div.muted', { text: 'Online game: cheats that change state would desync other players.' }));
+      gameControls.push(el('div.muted', { text: online ? 'Online: heal, kills, crates, wind, terrain and god mode are sent to everyone with your next lock-in. Ammo and items stay local (shots carry the weapon).' : 'Offline sandbox: everything applies instantly.' }));
     } else {
       gameControls.push(el('div.dev-row', {}, [btn('WEAPON TEST RANGE', () => this.testRange()), btn('BOT BATTLE (SPECTATE)', () => this.botBattle())]));
     }

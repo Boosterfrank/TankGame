@@ -35,6 +35,7 @@ export class Renderer {
     this.time = 0;
     this.motes = null;
     this.shooting = []; this.shootT = 1.5;
+    this.fade = 0; this.fadeTarget = 0; this.fadeRate = 1;
     this.makeVignette();
   }
 
@@ -133,6 +134,22 @@ export class Renderer {
     ctx.restore();
   }
 
+  // Black overlay used for scene transitions (0 = clear, 1 = black).
+  fadeTo(target, duration = 1) { this.fadeTarget = target; this.fadeRate = Math.abs(target - this.fade) / Math.max(0.05, duration); }
+  updateFade(dt) {
+    if (this.fade === this.fadeTarget) return;
+    const d = this.fadeTarget - this.fade, step = this.fadeRate * dt;
+    this.fade = Math.abs(d) <= step ? this.fadeTarget : this.fade + Math.sign(d) * step;
+  }
+  drawFade(ctx) {
+    if (this.fade <= 0.001) return;
+    ctx.save();
+    ctx.setTransform(this.scale * this.dpr, 0, 0, this.scale * this.dpr, 0, 0);
+    ctx.globalAlpha = Math.min(1, this.fade);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    ctx.restore();
+  }
+
   begin() {
     const ctx = this.ctx;
     ctx.setTransform(this.scale * this.dpr, 0, 0, this.scale * this.dpr, 0, 0);
@@ -156,6 +173,7 @@ export class Renderer {
     ctx.restore();
     this.drawAmbient(ctx, t, dt, opts.music);
     ctx.drawImage(this.vignette, 0, 0);
+    this.drawFade(ctx);
   }
 
   // Nebula brightens with the music's bass.
@@ -282,8 +300,9 @@ export class Renderer {
       if (game.dev?.hitboxes || game.dev?.debug) this.drawDebug(ctx, game);
     }
     ctx.restore();
-    if (opts.attract) { this.drawAttractOverlay(ctx, t, dt, opts.music); return; }
+    if (opts.attract) { this.drawAttractOverlay(ctx, t, dt, opts.music); this.drawFade(ctx); return; }
     this.drawOverlay(ctx, game, t);
+    this.drawFade(ctx);
   }
 
   drawTrajectory(ctx, tk, shot, game, color) {

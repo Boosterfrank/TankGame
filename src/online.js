@@ -74,7 +74,7 @@ export class OnlineSession {
 
   handle(m) {
     switch (m.type) {
-      case 'lobby': this.lobby = m; this.hostId = m.hostId; this.phase = m.phase; this.emit('lobby', m); break;
+      case 'lobby': this.lobby = m; this.hostId = m.hostId; this.phase = m.phase; this.startDeadline = m.startIn != null ? performance.now() + m.startIn : null; this.emit('lobby', m); break;
       case 'chat': this.chat.push({ name: m.system ? null : m.name, text: m.text, t: Date.now() }); if (this.chat.length > 60) this.chat.shift(); this.emit('chat', m); if (this.game) this.game.message(m.system ? m.text : `${m.name}: ${m.text}`, m.system ? '#90a4ae' : '#80deea'); break;
       case 'host': this.hostId = m.id; this.emit('host', m); if (this.game && this.isHost) this.game.message('You are now the host', '#ffd740'); break;
       case 'start': this.startGame(m); break;

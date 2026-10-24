@@ -452,7 +452,13 @@ add({ id: 'sunburst', name: 'Sunburst', cat: 'laser', unlock: 49, ammo: 1, icon:
   desc: 'Eight beams radiate from the point of impact.',
   spec: { boom: B(24, 14), color: '#ffd180', trail: 'spark', split: { n: 8, pattern: 'ring', speed: 700, spec: { r: 2.5, g: 0, wind: 0, trail: 'line', color: '#ffd180', life: 0.8, boom: B(20, 18) } } } });
 
-export const FAMILIES = F;
+// Developer-only weapon: never unlocks, never drops, never handed to bots. Three times the Mega-Nuke.
+add({ id: 'hbomb', name: 'Hydrogen Bomb', cat: 'heavy', unlock: 999, ammo: 1, icon: 'mushroom', color: '#d50000', dev: true, tiers: 1,
+  desc: 'Developer only. Three times the size of a Mega-Nuke, with a crater to match.',
+  spec: { r: 12, shake: 3, mushroom: true, color: '#ff8a80', trail: 'fire', boom: B(375, 300) } });
+
+export const ALL_FAMILIES = F;
+export const FAMILIES = F.filter((f) => !f.dev);
 
 // ---------------------------------------------------------------- Tier building
 const DM = [1, 1.25, 1.5, 1.8];
@@ -500,7 +506,7 @@ for (const fam of F) {
 }
 
 export const FAMILY_BY_ID = Object.fromEntries(F.map((f) => [f.id, f]));
-export const TOTAL_WEAPONS = F.reduce((s, f) => s + f.tiers.length, 0);
+export const TOTAL_WEAPONS = FAMILIES.reduce((s, f) => s + f.tiers.length, 0);
 
 export function getFamily(id) { return FAMILY_BY_ID[id]; }
 

@@ -14,7 +14,8 @@ export class MusicPlayer {
     this.failed = false;
   }
 
-  get active() { return !!this.el && this.started && !this.failed && this.enabled && !this.el.paused; }
+  // Playback (and therefore the analyser) keeps running while muted; mute only silences the gain.
+  get active() { return !!this.el && this.started && !this.failed && !this.el.paused; }
   get title() { return MUSIC_TRACKS[this.track]?.title || 'Music'; }
 
   init() {
@@ -49,7 +50,7 @@ export class MusicPlayer {
 
   play() {
     this.init();
-    if (!this.el || this.failed || !this.enabled) return;
+    if (!this.el || this.failed) return;
     const p = this.el.play();
     if (p && p.catch) p.catch(() => { /* autoplay blocked or no output device */ });
     this.started = true;

@@ -90,6 +90,8 @@ export class App {
   beginSession() {
     this.audio.init();
     this.music.play();
+    this.renderer.fade = 1;
+    this.renderer.fadeTo(0, this.profile.settings.intro !== false ? 1.2 : 1.8);
     if (this.profile.settings.intro !== false) this.startIntro();
     else { this.startAttract(); this.show('menu'); }
   }
@@ -117,9 +119,12 @@ export class App {
       seed: rng.int(1, 1e9), audio: SILENT_AUDIO,
     });
     g.dev = {};
-    g.on.gameOver = () => { setTimeout(() => { if (this.attract === g) this.startAttract(); }, 2500); };
+    // Fade to black, hold, then a fresh battle fades in.
+    g.on.gameOver = () => { this.renderer.fadeTo(1, 1.0); setTimeout(() => { if (this.attract === g) this.startAttract(); }, 2100); };
     this.attract = g;
     this.attractAcc = 0;
+    this.renderer.fade = Math.max(this.renderer.fade, 0.999);
+    this.renderer.fadeTo(0, 1.8);
   }
 
   // ------------------------------------------------------------ screens
@@ -211,6 +216,8 @@ export class App {
     this.acc = 0;
     this.attract = null;
     this.music.duck(true);
+    this.renderer.fade = Math.max(this.renderer.fade, 0.85);
+    this.renderer.fadeTo(0, 0.9);
     if (config.online) {
       const onClose = () => { if (this.game === g) { this.hud.hide(); this.removeSpectate(); this.closeChat(); this.game = null; this.session = null; this.modal.innerHTML = ''; this.modal.classList.remove('hidden'); this.modal.append(S.confirmModal('Connection to the room was lost.', () => { this.closeModal(); this.show('menu'); }, () => { this.closeModal(); this.show('menu'); })); } };
       config.online.on('close', onClose);
@@ -373,8 +380,8 @@ export class App {
     const shift = k.has('ShiftLeft') || k.has('ShiftRight');
     for (const [code, h] of this.input.holds) {
       h.t += dt;
-      if (h.t < 0.35) continue;
-      const rate = h.t < 1.2 ? 12 : h.t < 2.5 ? 30 : 60;
+      if (h.t < 0.22) continue;
+      const rate = h.t < 0.7 ? 18 : h.t < 1.6 ? 40 : 80;
       h.acc += rate * dt;
       const n = Math.floor(h.acc);
       if (n > 0) { h.acc -= n; this.aimKey(code, n, shift); }
@@ -389,6 +396,7 @@ export class App {
     this.lastTs = ts;
     this.time += dt;
     this.music.update();
+    this.renderer.updateFade(dt);
     this.stage.style.setProperty('--bass', this.music.bass.toFixed(3));
     const g = this.game;
     if (this.intro) {

@@ -7,7 +7,7 @@ import { spawnColumns } from './terrain-gen.js';
 import { Tank } from './tank.js';
 import { Projectile, normSpec } from './projectile.js';
 import { FX } from './fx.js';
-import { getWeapon, FAMILIES } from './weapons.js';
+import { getWeapon, FAMILIES, FAMILY_BY_ID } from './weapons.js';
 import { ITEMS } from './items.js';
 import { planBotShot, planBotItems, botArsenal } from './ai.js';
 
@@ -32,6 +32,7 @@ export class Game {
     this.skyLasers = [];
     this.markers = [];
     this.crates = [];
+    this.crateSeq = 0;
     this.tracers = new Map(); // tank id -> path array
     this.messages = [];
     this.time = 0;
@@ -120,7 +121,7 @@ export class Game {
   // ------------------------------------------------------------ phases
   beginAim() {
     this.phase = 'aim';
-    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; }
+    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; t.roundCrates = []; t.roundDev = []; }
     this.lockInfo = null;
     const o = this.online;
     this.botsToPlan = (o && !o.isHost) || this.settings.dummies ? [] : this.tanks.filter((t) => t.isBot && t.alive);
@@ -141,7 +142,8 @@ export class Game {
   }
 
   buildLockPayload(t) {
-    const payload = { x: t ? Math.round(t.x) : 0, shot: t ? t.shot : null, items: t ? (t.roundItems || []).slice() : [], dead: !t };
+    const me = t || this.me;
+    const payload = { x: t ? Math.round(t.x) : 0, shot: t ? t.shot : null, items: t ? (t.roundItems || []).slice() : [], crates: me ? (me.roundCrates || []).slice() : [], dev: me ? (me.roundDev || []).slice() : [], god: !!me?.god, dead: !t };
     if (this.online?.isHost) {
       payload.bots = {};
       this.tanks.forEach((b, i) => { if (b.isBot && b.alive && b.shot) payload.bots[i] = { shot: b.shot, items: (b.roundItems || []).slice() }; });
@@ -171,12 +173,17 @@ export class Game {
       const t = this.tankByNet(e.id);
       if (!t) continue;
       const mine = e.id === o.myId;
+      if (!mine) {
+        t.god = !!e.god;
+        for (const op of e.dev || []) this.applyDevOp(op, t, true);
+      }
       if (t.alive && !e.dead) {
         if (!mine) {
           t.x = clamp(Math.round(e.x || t.x), 10, WORLD_W - 10);
           t.y = this.terrain.surfaceY(t.x, Math.max(0, t.y - 60));
           t.settle(this.terrain, 1 / 60);
           for (const it of e.items || []) this.useItem(it.id, t, it.payload, true);
+          for (const cid of e.crates || []) { const i = this.crates.findIndex((c) => c.id === cid); if (i >= 0) { this.grabCrate(t, this.crates[i]); this.crates.splice(i, 1); } }
         }
         t.shot = e.shot || null; t.locked = true;
         if (e.shot) { t.angle = e.shot.angle; t.power = e.shot.power; }
@@ -640,7 +647,7 @@ export class Game {
 
   applyDamage(t, amount, owner, famId, environmental = false, pierce = false) {
     if (!t.alive || amount <= 0) return 0;
-    if (this.dev?.god && t.isProfile) { this.fx.text(t.x, t.cy - 34, 'GOD', '#ffd740'); return 0; }
+    if (t.god) { this.fx.text(t.x, t.cy - 34, 'GOD', '#ffd740'); return 0; }
     if (owner && owner !== t && owner.team !== t.team) amount = Math.max(1, Math.round(amount * this.balanceMult(owner, t)));
     const dealt = t.takeDamage(amount, pierce);
     const hostile = owner && owner !== t && owner.team !== t.team;
@@ -730,13 +737,15 @@ export class Game {
   }
 
   // ------------------------------------------------------------ crates
-  // Crates land instantly in the simulation (the parachute descent is purely visual) so that
-  // lockstep clients agree on where they are.
+  // Crates land instantly in the simulation (the parachute descent is purely visual) and their
+  // contents are decided when they spawn, so lockstep clients agree on them without extra RNG use.
   spawnCrate(atX = null, type = null) {
     const x = atX ?? this.rng.int(90, WORLD_W - 90);
     type = type || (this.rng.chance(0.7) ? 'weapon' : 'health');
     const y = this.terrain.surfaceY(x, 0) - 12;
-    this.crates.push({ x, y, vy: 0, type, landed: true, drop: 0, t: 0 });
+    const pool = FAMILIES.filter((f) => f.id !== 'shot');
+    const famId = type === 'weapon' ? this.rng.pick(pool).id : null;
+    this.crates.push({ id: ++this.crateSeq, x, y, vy: 0, type, famId, landed: true, drop: 0, t: 0 });
     this.message(type === 'weapon' ? 'Supply drop incoming!' : 'Repair crate incoming!', '#ffd740');
   }
 
@@ -751,16 +760,25 @@ export class Game {
         if (c.y > WORLD_H + 40) { this.crates.splice(i, 1); continue; }
       } else if (!this.terrain.solid(c.x, c.y + 14)) { c.landed = false; c.vy = 0; }
     }
-    if (!(this.online && this.phase === 'aim')) this.checkCratePickups();
+    if (this.online && this.phase === 'aim') {
+      // Only the local player picks up during the aim phase; the pickup is replayed by everyone at the volley.
+      const me = this.me;
+      if (me && me.alive && !me.locked) this.checkCratePickups(me, true);
+    } else this.checkCratePickups();
   }
 
-  checkCratePickups() {
+  checkCratePickups(only = null, record = false) {
     for (let i = this.crates.length - 1; i >= 0; i--) {
       const c = this.crates[i];
       if (!this.online && c.drop < 1) continue;
       for (const t of this.tanks) {
-        if (!t.alive) continue;
-        if (Math.abs(t.x - c.x) < 28 && Math.abs(t.cy - c.y) < 34) { this.grabCrate(t, c); this.crates.splice(i, 1); break; }
+        if (!t.alive || (only && t !== only)) continue;
+        if (Math.abs(t.x - c.x) < 34 && Math.abs(t.cy - c.y) < 50) {
+          if (record) (t.roundCrates = t.roundCrates || []).push(c.id);
+          this.grabCrate(t, c);
+          this.crates.splice(i, 1);
+          break;
+        }
       }
     }
   }
@@ -768,19 +786,44 @@ export class Game {
   grabCrate(t, c) {
     this.audio.play('pickup');
     this.fx.burst(c.x, c.y, 20, 140, '#ffd740', 0.6, 2.5, { add: true, g: 0.3 });
-    if (c.type === 'health') {
+    if (c.type === 'health' || !c.famId) {
       const h = t.heal(35);
       this.fx.text(t.x, t.cy - 34, `+${h}`, '#69f0ae');
       this.message(`${t.name} picked up a repair crate`, '#69f0ae');
       this.on.crate?.(t, 'Repair crate: +35 HP');
       return;
     }
-    const pool = FAMILIES.filter((f) => f.id !== 'shot');
-    const known = pool.filter((f) => t.arsenal.has(f.id));
-    const fam = (known.length && this.rng.chance(0.6)) ? this.rng.pick(known) : this.rng.pick(pool);
+    const fam = FAMILY_BY_ID[c.famId];
+    if (!fam) return;
     if (!t.tiers[fam.id]) t.tiers[fam.id] = 1;
     t.addAmmo(fam.id, 1);
     this.message(`${t.name} found ${fam.name}`, '#ffd740');
     this.on.crate?.(t, `Found: ${fam.name}`);
+  }
+
+  // ------------------------------------------------------------ developer actions
+  // Applied locally right away and, online, replayed by every client at the next volley so the
+  // lockstep simulation stays identical.
+  devOp(op) {
+    const me = this.me;
+    this.applyDevOp(op, me, false);
+    if (this.online && me) (me.roundDev = me.roundDev || []).push(op);
+  }
+
+  applyDevOp(op, tank, replay) {
+    switch (op.type) {
+      case 'heal': if (tank?.alive) { tank.hp = tank.maxHp; tank.armor = PHYS.maxArmor; this.fx.explosion(tank.x, tank.cy, 40, '#69f0ae', { heal: true }); } break;
+      case 'kill': if (tank) for (const o of this.tanks) if (o.alive && o !== tank && o.team !== tank.team) this.killTank(o, tank); break;
+      case 'crate': this.spawnCrate(clamp(Math.round(+op.x || 0), 60, WORLD_W - 60), op.kind === 'health' ? 'health' : 'weapon'); break;
+      case 'wind': this.wind = clamp(+op.v || 0, -12, 12); break;
+      case 'terrain': {
+        this.terrain.generate(String(op.style || 'random'), (+op.seed || 1) | 0);
+        this.crates.length = 0; this.tracers.clear();
+        for (const t of this.tanks) { t.y = this.terrain.surfaceY(t.x, 0) - (replay ? 0 : 120); t.onGround = !!replay; t.vy = 0; }
+        break;
+      }
+      default: return;
+    }
+    this.message(`DEV: ${tank?.name || 'someone'} used ${op.type}`, '#ea80fc');
   }
 }

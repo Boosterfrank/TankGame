@@ -255,5 +255,6 @@ export class Intro {
       ctx.fillText('CLICK OR PRESS ANY KEY TO SKIP', WORLD_W - 30, WORLD_H - 24);
       ctx.restore();
     }
+    renderer.drawFade(ctx);
   }
 }

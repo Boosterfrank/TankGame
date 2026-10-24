@@ -43,8 +43,10 @@ const chat = await a.until((m) => m.type === 'chat' && m.system && /ready up/.te
 check(!!chat, 'start refused until ready');
 b.send({ type: 'ready', ready: true });
 await a.until((m) => m.type === 'lobby' && m.players[1]?.ready);
-a.send({ type: 'start' });
-const start = await b.until((m) => m.type === 'start');
+a.send({ type: 'ready', ready: true });
+const cd = await b.until((m) => m.type === 'lobby' && m.startIn != null);
+check(cd.startIn > 1000 && cd.startIn <= 3000, `countdown announced (${cd.startIn})`);
+const start = await b.until((m) => m.type === 'start', 8000);
 check(start.players.length === 3 && start.players[2].bot && start.players[0].unlockedIds.includes('tri'), 'start payload');
 check(start.deadline > Date.now(), 'deadline set');
 // round 1: A locks with bots, B does nothing -> alarm fires volley after deadline (2s + grace)

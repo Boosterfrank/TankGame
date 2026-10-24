@@ -36,9 +36,12 @@ it into **Settings → Online relay server** in the running game. `npm run dev` 
 starts a local relay on `http://localhost:8787` for development.
 
 Rooms are created from **Play Online**: public rooms appear in the browser, private rooms are
-joined by their five-character code. The host controls settings and bots, everyone else readies up,
-and chat works in the lobby and in-game (Enter). If a player disconnects mid-game their tank is
-destroyed at the next volley; if the host leaves, the next player becomes host.
+joined by their five-character code. The host controls settings and bots; everyone, host included,
+clicks READY and the battle starts by itself after a three-second countdown (anyone unreadying
+cancels it). Chat works in the lobby and in-game (Enter). If a player disconnects mid-game their
+tank is destroyed at the next volley; if the host leaves, the next player becomes host. Supply
+crates are picked up the moment you drive into one; the pickup is replayed for everyone at the
+next volley.
 
 ## Deploying the game to Cloudflare Pages
 
@@ -66,7 +69,8 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
 - **Aiming guide.** A translucent range circle around your tank with a wedge whose length is your
   power, and a "power, angle" readout under the tank.
 - **Items** (repair, shield, teleport, double damage, fuel, ammo) never end your turn.
-- **Supply drops** parachute in; drive into them for weapons you may not even have unlocked.
+- **Supply drops** parachute in; drive into them for weapons you may not even have unlocked. Their
+  contents are decided when they spawn, so online players always agree on what was inside.
 - Deathmatch or Team Battle, 100–300 HP, five wind levels, turn timers, bot difficulty,
   ten map styles and a sandbox mode that unlocks every weapon for one game.
 
@@ -74,7 +78,7 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
 
 | Input | Action |
 | --- | --- |
-| `←` `→` | Aim: one degree per tap, hold to accelerate (`Shift` = 5 per step). Aim runs from straight down on one side, over the top, to straight down on the other |
+| `←` `→` | Aim: one degree per tap, hold to accelerate up to 80 per second (`Shift` = 5 per step). Aim runs from straight down on one side, over the top, to straight down on the other |
 | `↑` `↓` / mouse wheel | Power, one point per step |
 | `A` `D` | Drive (uses fuel) |
 | Mouse drag on the battlefield | Aim from your tank toward the pointer |
@@ -93,7 +97,10 @@ destroyed at the next volley; if the host leaves, the next player becomes host.
 - **Music and visualizer.** `MUSIC_TRACKS` in `src/config.js` lists the tracks (compressed OGG/MP3
   copies of `assets/menu_music.wav` load first). An AnalyserNode drives the spectrum bars along the
   bottom of the menus, the pulsing nebula and the equalizer in the now-playing chip. Music ducks
-  during battles. Volume and on/off live in Settings.
+  during battles. The visualizer keeps running while music is muted (the MUTE button in the
+  now-playing chip); the volume slider lives in Settings.
+- **Transitions.** The battlefield fades to black and back when the background battle resets, and
+  fades in after the start button and when a match begins.
 
 ## Developer tools
 
@@ -101,6 +108,9 @@ A hidden developer console (profile cheats, god mode, infinite ammo, time scale,
 bot-aim reveal, a weapon test range and a spectator bot battle) is gated behind a password. The
 gate opens after clicking the profile avatar in the top bar five times quickly; the password hash
 lives in `src/ui/devtools.js`. Once unlocked, the `` ` `` key or the DEV button toggles the panel.
+It also hands out the developer-only Hydrogen Bomb (three times a Mega-Nuke). Online, the actions
+that change shared state (heal, kills, crates, wind, terrain, god mode) travel with your next lock-in
+so every client applies them in lockstep; ammo and items stay local because shots carry the weapon.
 
 ## Project layout
 

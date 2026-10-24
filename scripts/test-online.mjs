@@ -52,14 +52,19 @@ await guest.press('.chat-input', 'Enter');
 await host.waitForFunction(() => window.__app.session.chat.some((c) => c.text === 'hello from guest'));
 await guest.click('.player-row.me .pl-ready');
 await host.waitForFunction(() => window.__app.session.lobby.players.find((p) => !p.bot && p.id !== window.__app.session.hostId)?.ready);
+await host.click('.lobby-right button:has-text("READY")');
+await host.waitForFunction(() => window.__app.session?.startDeadline != null, null, { timeout: 10000 });
 await host.waitForTimeout(300);
 if (shots) await host.screenshot({ path: `${outDir}/31-online-lobby.png` });
-await host.click('text=START GAME');
 await host.waitForFunction(() => window.__app.game && window.__app.game.phase === 'aim', null, { timeout: 15000 });
 await guest.waitForFunction(() => window.__app.game && window.__app.game.phase === 'aim', null, { timeout: 15000 });
 const seeds = await Promise.all([host, guest].map((p) => p.evaluate(() => ({ seed: window.__app.game.seed, tanks: window.__app.game.tanks.map((t) => [t.name, t.isBot, Math.round(t.x), t.netId]) }))));
 check(seeds[0].seed === seeds[1].seed, 'same seed');
 check(JSON.stringify(seeds[0].tanks) === JSON.stringify(seeds[1].tanks), 'same tank setup');
+// dev-op replication + crate pickup: the guest spawns a weapon crate on itself, picks it up at once,
+// and the host replays both the spawn and the pickup at the volley.
+await guest.evaluate(() => { const g = window.__app.game; g.devOp({ type: 'crate', x: Math.round(g.me.x), kind: 'weapon' }); });
+await guest.waitForFunction(() => (window.__app.game.me.roundCrates || []).length === 1 && window.__app.game.crates.length === 0, null, { timeout: 5000 });
 // guest moves, both lock
 await guest.keyboard.down('KeyD'); await guest.waitForTimeout(400); await guest.keyboard.up('KeyD');
 await guest.evaluate(() => { const g = window.__app.game; g.current.angle = 120; g.current.power = 75; g.useItem('shield'); g.fire(); });
@@ -75,13 +80,14 @@ await guest.waitForFunction(() => window.__app.game.phase === 'aim' && window.__
 const state = await Promise.all([host, guest].map((p) => p.evaluate(() => {
   const g = window.__app.game;
   let solid = 0; const m = g.terrain.mask; for (let i = 0; i < m.length; i += 7) solid += m[i];
-  return { wind: g.wind, solid, tanks: g.tanks.map((t) => [t.name, Math.round(t.hp), Math.round(t.armor), Math.round(t.x), Math.round(t.y), t.alive]), msgs: g.messages.map((x) => x.text) };
+  return { wind: g.wind, solid, crates: g.crates.length, crateSeq: g.crateSeq, tanks: g.tanks.map((t) => [t.name, Math.round(t.hp), Math.round(t.armor), Math.round(t.x), Math.round(t.y), t.alive]), msgs: g.messages.map((x) => x.text) };
 })));
 console.log('host :', JSON.stringify(state[0].tanks), 'solid', state[0].solid, 'wind', state[0].wind);
 console.log('guest:', JSON.stringify(state[1].tanks), 'solid', state[1].solid, 'wind', state[1].wind);
 check(state[0].wind === state[1].wind, 'same wind after round');
 check(JSON.stringify(state[0].tanks) === JSON.stringify(state[1].tanks), 'identical tank state after volley (lockstep)');
 check(state[0].solid === state[1].solid, 'identical terrain after volley');
+check(state[0].crateSeq === 1 && state[1].crateSeq === 1 && state[0].crates === 0 && state[1].crates === 0, `dev crate replicated and claimed on both (${state[0].crateSeq}/${state[1].crateSeq}, ${state[0].crates}/${state[1].crates})`);
 check(state[0].msgs.length > 0, 'host saw messages');
 // in-game chat
 await guest.keyboard.press('Enter');

@@ -1,7 +1,7 @@
 // Central game configuration. Change the name here and it updates everywhere.
 export const GAME_NAME = 'Unnamed Tank Game';
 export const STUDIO = 'Qubiplex';
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 
 // Opening cutscene: show the studio logo card first (set false to skip it).
 export const INTRO_STUDIO_CARD = true;

@@ -10,6 +10,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LOCK_GRACE_MS = 2500;      // extra time after the client-visible deadline
 const DONE_TIMEOUT_MS = 45000;   // max wait for clients to finish simulating a volley
 const ROOM_TTL_MS = 3 * 60 * 1000;
+const START_DELAY_MS = 3000;     // countdown once everyone is ready
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -69,7 +70,7 @@ function freshState(code = '') {
   return {
     code, phase: 'empty', hostId: null, players: {}, order: [], bots: {},
     settings: { mode: 'deathmatch', hp: 100, wind: 'low', turnTime: 30, tracers: true, items: true, crates: true, difficulty: 'Normal', arsenal: 'unlocked', map: 'random', balance: true },
-    isPublic: true, seed: 0, round: 0, locks: {}, done: {}, left: [], hostSnapshot: null, deadline: null,
+    isPublic: true, seed: 0, round: 0, locks: {}, done: {}, left: [], hostSnapshot: null, deadline: null, startAt: null,
     created: Date.now(), updated: Date.now(),
   };
 }
@@ -125,6 +126,7 @@ export class Room {
     const s = this.state;
     return {
       type: 'lobby', code: s.code, phase: s.phase, hostId: s.hostId, settings: s.settings, isPublic: s.isPublic,
+      startIn: s.startAt ? Math.max(0, s.startAt - Date.now()) : null,
       players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, ready: p.ready, bot: !!p.bot, connected: p.connected !== false }; }),
     };
   }
@@ -160,7 +162,7 @@ export class Room {
         };
         s.order.push(id);
         if (!s.hostId || !s.players[s.hostId]) s.hostId = id;
-        await this.save();
+        await this.refreshStart();
         this.broadcast(this.lobbyMessage());
         this.broadcast({ type: 'chat', system: true, text: `${s.players[id].name} joined` });
         await this.publish();
@@ -223,12 +225,28 @@ export class Room {
       }
       default: changed = false;
     }
-    if (changed) { await this.save(); this.broadcast(this.lobbyMessage()); await this.publish(); }
+    if (changed) { await this.refreshStart(); this.broadcast(this.lobbyMessage()); await this.publish(); }
+  }
+
+  allReady() {
+    const s = this.state;
+    const humans = this.connectedHumans();
+    return s.phase === 'lobby' && s.order.length >= 2 && humans.length >= 1 && humans.every((h) => s.players[h].ready);
+  }
+
+  // Start a countdown when everyone is ready; cancel it when anyone isn't.
+  async refreshStart() {
+    const s = this.state;
+    if (this.allReady()) { if (!s.startAt) s.startAt = Date.now() + START_DELAY_MS; }
+    else s.startAt = null;
+    await this.save();
+    await this.armAlarm();
   }
 
   async startGame() {
     const s = this.state;
     s.phase = 'game';
+    s.startAt = null;
     s.seed = Math.floor(Math.random() * 2 ** 31);
     s.round = 1;
     s.locks = {}; s.done = {}; s.left = []; s.hostSnapshot = null;
@@ -250,7 +268,8 @@ export class Room {
 
   async armAlarm() {
     const s = this.state;
-    if (s.phase === 'game' && s.deadline) await this.ctx.storage.setAlarm(s.deadline);
+    if (s.phase === 'lobby') { if (s.startAt) await this.ctx.storage.setAlarm(s.startAt); else await this.ctx.storage.deleteAlarm(); }
+    else if (s.phase === 'game' && s.deadline) await this.ctx.storage.setAlarm(s.deadline);
     else if (s.phase === 'volley') await this.ctx.storage.setAlarm(Date.now() + DONE_TIMEOUT_MS);
     else await this.ctx.storage.deleteAlarm();
   }
@@ -263,6 +282,9 @@ export class Room {
         s.locks[id] = {
           x: +msg.x || 0, shot: msg.shot && typeof msg.shot === 'object' ? { weaponId: clampStr(msg.shot.weaponId, 24), angle: +msg.shot.angle || 0, power: +msg.shot.power || 0 } : null,
           items: Array.isArray(msg.items) ? msg.items.slice(0, 12) : [],
+          crates: Array.isArray(msg.crates) ? msg.crates.slice(0, 8).map((c) => +c || 0) : [],
+          dev: Array.isArray(msg.dev) ? msg.dev.slice(0, 12).filter((o) => o && typeof o.type === 'string').map((o) => ({ type: clampStr(o.type, 16), x: +o.x || 0, v: +o.v || 0, seed: +o.seed || 0, kind: clampStr(o.kind, 12), style: clampStr(o.style, 16) })) : [],
+          god: !!msg.god,
           bots: isHost && msg.bots && typeof msg.bots === 'object' ? msg.bots : undefined,
         };
         await this.save();
@@ -325,7 +347,7 @@ export class Room {
     for (const id of s.order) if (s.players[id].connected === false) { delete s.players[id]; }
     s.order = s.order.filter((id) => s.players[id]);
     for (const id of s.order) s.players[id].ready = !!s.players[id].bot;
-    s.locks = {}; s.done = {}; s.left = []; s.deadline = null;
+    s.locks = {}; s.done = {}; s.left = []; s.deadline = null; s.startAt = null;
     await this.save();
     this.broadcast(this.lobbyMessage());
     await this.publish();
@@ -334,6 +356,11 @@ export class Room {
 
   async alarm() {
     const s = this.state;
+    if (s.phase === 'lobby') {
+      if (s.startAt && Date.now() >= s.startAt - 100 && this.allReady()) await this.startGame();
+      else { s.startAt = null; await this.save(); this.broadcast(this.lobbyMessage()); }
+      return;
+    }
     if (s.phase === 'game') await this.emitVolley();
     else if (s.phase === 'volley') await this.nextRound();
   }
@@ -365,6 +392,7 @@ export class Room {
     }
     await this.save();
     this.broadcast({ type: 'chat', system: true, text: `${p.name} left` });
+    if (s.phase === 'lobby') await this.refreshStart();
     if (s.phase === 'lobby' || s.phase === 'post') { this.broadcast(this.lobbyMessage()); await this.publish(); }
     else if (s.phase === 'game') {
       this.broadcast({ type: 'left', id });

@@ -382,7 +382,7 @@ export class App {
       if ((e.code === 'Enter' || ((e.code === 'Slash' || e.code === 'KeyT') && !this.hud.overlayMode)) && g.online) { e.preventDefault(); if (this.hud.overlayMode) this.hud.closeOverlay(); this.openChat(); }
       else if (e.code === 'Space' || e.code === 'Enter') { if (this.hud.overlayMode) this.hud.closeOverlay(); else this.fire(); }
       else if (e.code === 'Backquote') { this.dev.toggle(); }
-      else if (e.code === 'Tab' || e.code === 'KeyW') { this.hud.toggleOverlay('weapons'); }
+      else if (e.code === 'Tab' || e.code === 'KeyW') { e.preventDefault(); this.hud.toggleOverlay('weapons'); } // prevent the W from landing in the search box
       else if (e.code === 'KeyE') { this.hud.toggleOverlay('items'); }
       else if (e.code === 'KeyQ') { g.cycleWeapon(-1); }
       else if (e.code === 'Escape') { if (this.hud.overlayMode) this.hud.closeOverlay(); else if (!this.modal.classList.contains('hidden')) this.closeModal(); else this.confirmLeave(); }

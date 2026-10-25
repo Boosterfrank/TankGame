@@ -61,6 +61,8 @@ await guest.waitForFunction(() => window.__app.game && window.__app.game.phase =
 const seeds = await Promise.all([host, guest].map((p) => p.evaluate(() => ({ seed: window.__app.game.seed, tanks: window.__app.game.tanks.map((t) => [t.name, t.isBot, Math.round(t.x), t.netId]) }))));
 check(seeds[0].seed === seeds[1].seed, 'same seed');
 check(JSON.stringify(seeds[0].tanks) === JSON.stringify(seeds[1].tanks), 'same tank setup');
+const loadouts = await Promise.all([host, guest].map((p) => p.evaluate(() => window.__app.game.tanks.map((t) => [...t.arsenal.keys()].join(',')))));
+check(JSON.stringify(loadouts[0]) === JSON.stringify(loadouts[1]) && loadouts[0].every((l) => l.split(',').length < 40), `random loadouts identical on both clients (${loadouts[0].map((l) => l.split(',').length).join('/')} weapons)`);
 const cos = await guest.evaluate(() => window.__app.game.tanks.map((t) => t.cosmetics && t.cosmetics.pattern));
 check(cos[0] === 'stripes' && cos[1] === 'stripes', `cosmetics travel with players (${JSON.stringify(cos)})`);
 // dev-op replication + crate pickup: the guest spawns a weapon crate on itself, picks it up at once,

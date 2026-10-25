@@ -63,6 +63,12 @@ next volley.
 - **Wind** changes every round and pushes shells sideways; lasers ignore it.
 - **XP and levels.** Damage you deal earns XP. Each level unlocks new weapon families
   (level 1 starts with 4, everything is unlocked by level 50).
+- **Battle loadouts.** You do not bring your whole armory into a fight. Each battle deals you Shot
+  plus two random weapons from every category (basic, multi-shot, clusters, bouncers, diggers,
+  lasers, air support, guided, jets, heavy ordnance, terrain, oddities), drawn from what you have
+  unlocked with weights that favor the weapons you have upgraded (tier I ×1, II ×2.5, III ×4,
+  IV ×5.5). Bots draw the same way. Supply drops then hand out weapons you are not carrying. The
+  lobby's **Loadout** setting switches back to the full arsenal, and sandbox mode always gives everything.
 - **Mastery.** Each family levels from Tier I to Tier IV through the damage it deals,
   gaining damage, blast radius and extra shells. Gears (earned per game) can buy a tier early:
   `(20 + unlockLevel × 3) × {1, 1.6, 2.2}` rounded to 5, so a level-1 weapon costs 25/35/50 and a
@@ -85,7 +91,7 @@ next volley.
   Shells → Triple Damage. Everyone starts a battle with two of each type; the tier of each copy is
   rolled from the shared seed with odds that improve with level (`tierOdds` in `src/items.js`: about
   8% tier III at level 1, 40% at level 60).
-- **Supply drops** parachute in: weapon crates (weapons you may not even have unlocked), item crates
+- **Supply drops** parachute in: weapon crates (weapons you are not carrying, possibly not even unlocked), item crates
   (an item, preferring types you have run out of) and repair crates. Their contents are decided when
   they spawn, so online players always agree on what was inside.
 - Deathmatch or Team Battle, 100–300 HP, five wind levels, turn timers, bot difficulty,

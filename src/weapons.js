@@ -518,6 +518,25 @@ export function getWeapon(id, tier = 1) {
   return { id, fam, tier: t.tier, name: t.name, spec: t.spec, fire: t.fire, icon: fam.icon, color: fam.color, ammo: fam.ammo };
 }
 
+// Random battle loadout: Shot plus `perCat` weapons from each category, drawn without replacement
+// with weights that favor weapons the player has upgraded (tier I ×1, II ×2.5, III ×4, IV ×5.5).
+// Seeded, so every client in an online match builds the same loadout for everyone.
+export function pickLoadout(families, tierOf, rng, perCat = 2) {
+  const picked = new Set(families.filter((f) => f.id === 'shot').map((f) => f.id));
+  const byCat = new Map();
+  for (const f of families) { if (f.id === 'shot') continue; if (!byCat.has(f.cat)) byCat.set(f.cat, []); byCat.get(f.cat).push(f); }
+  for (const pool of byCat.values()) {
+    const rest = pool.slice();
+    for (let k = 0; k < perCat && rest.length; k++) {
+      const weights = rest.map((f) => 1 + (Math.max(1, tierOf(f) || 1) - 1) * 1.5);
+      let r = rng.f() * weights.reduce((a, b) => a + b, 0), idx = 0;
+      while (idx < rest.length - 1 && (r -= weights[idx]) >= 0) idx++;
+      picked.add(rest.splice(idx, 1)[0].id);
+    }
+  }
+  return families.filter((f) => picked.has(f.id));
+}
+
 export function familiesUnlockedAt(level) {
   return F.filter((f) => f.unlock <= level);
 }

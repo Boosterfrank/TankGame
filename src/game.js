@@ -7,7 +7,7 @@ import { spawnColumns } from './terrain-gen.js';
 import { Tank } from './tank.js';
 import { Projectile, normSpec } from './projectile.js';
 import { FX } from './fx.js';
-import { getWeapon, FAMILIES, FAMILY_BY_ID } from './weapons.js';
+import { getWeapon, FAMILIES, FAMILY_BY_ID, pickLoadout } from './weapons.js';
 import { ITEMS, ITEM_BY_ID, ITEM_TYPES, ITEM_TYPE_BY_ID, itemId, rollTier, itemCount } from './items.js';
 import { planBotShot, planBotItems, botArsenal } from './ai.js';
 import { TRAIL_STYLES, cleanCosmetics } from './cosmetics.js';
@@ -75,12 +75,18 @@ export class Game {
       t.y = this.terrain.surfaceY(t.x, 0) - 190; // tanks drop in during the intro
       t.onGround = false;
       t.angle = t.x > WORLD_W / 2 ? 120 : 60;
-      if (t.isBot) botArsenal(t, def.level || 10, this.settings.arsenal === 'all');
+      // Battle loadout: by default Shot plus two random weapons per category (upgraded ones are
+      // likelier), drawn from the shared seed. Sandbox ("Everything") and the Full arsenal setting
+      // hand out the whole list. Tiers are kept for every unlocked weapon so crates respect them.
+      const randomLoadout = this.settings.arsenal !== 'all' && (this.settings.loadout || 'random') === 'random';
+      if (t.isBot) botArsenal(t, def.level || 10, this.settings.arsenal === 'all', randomLoadout ? this.rng : null);
       else {
         const list = this.settings.arsenal === 'all' ? FAMILIES : FAMILIES.filter((f) => def.unlockedIds?.includes(f.id) || f.id === 'shot');
-        for (const f of list) { t.arsenal.set(f.id, f.ammo); t.tiers[f.id] = def.tiers?.[f.id] || 1; }
+        for (const f of list) t.tiers[f.id] = def.tiers?.[f.id] || 1;
+        for (const f of randomLoadout ? pickLoadout(list, (f) => t.tiers[f.id], this.rng) : list) t.arsenal.set(f.id, f.ammo);
         this.humans++;
       }
+      t.arsenalAtRound = new Set([...t.arsenal.keys()].filter((id) => t.ammo(id) > 0));
       if (this.settings.items) { // two of each type; the tier of each copy is rolled with level-based odds
         for (const g of ITEM_TYPES) for (let k = 0; k < 2; k++) { const id = itemId(g.type, rollTier(this.rng.f(), t.level)); t.items[id] = (t.items[id] || 0) + 1; }
       }
@@ -131,7 +137,7 @@ export class Game {
   // ------------------------------------------------------------ phases
   beginAim() {
     this.phase = 'aim';
-    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; t.roundCrates = []; t.roundDev = []; t.itemsAtRound = { ...t.items }; }
+    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; t.roundCrates = []; t.roundDev = []; t.itemsAtRound = { ...t.items }; t.arsenalAtRound = new Set([...t.arsenal.keys()].filter((id) => t.ammo(id) > 0)); }
     this.lockInfo = null;
     const o = this.online;
     this.botsToPlan = (o && !o.isHost) || this.settings.dummies ? [] : this.tanks.filter((t) => t.isBot && t.alive);
@@ -778,12 +784,10 @@ export class Game {
     const x = atX ?? this.rng.int(90, WORLD_W - 90);
     if (!type) { const r = this.rng.f(); type = r < 0.5 ? 'weapon' : r < 0.8 && this.settings.items ? 'item' : 'health'; }
     const y = this.terrain.surfaceY(x, 0) - 12;
-    const pool = FAMILIES.filter((f) => f.id !== 'shot');
-    const famId = type === 'weapon' ? this.rng.pick(pool).id : null;
-    // Item crates decide what they hold when picked up (favoring types the picker ran out of), from
-    // rolls fixed at spawn so every client resolves the same contents.
-    const rolls = type === 'item' ? [this.rng.f(), this.rng.f()] : null;
-    this.crates.push({ id: ++this.crateSeq, x, y, vy: 0, type, famId, rolls, landed: true, drop: 0, t: 0 });
+    // Weapon and item crates decide what they hold when picked up (favoring weapons / item types the
+    // picker does not carry), from rolls fixed at spawn so every client resolves the same contents.
+    const rolls = type === 'health' ? null : [this.rng.f(), this.rng.f()];
+    this.crates.push({ id: ++this.crateSeq, x, y, vy: 0, type, rolls, landed: true, drop: 0, t: 0 });
     this.message(type === 'weapon' ? 'Supply drop incoming!' : type === 'item' ? 'Item crate incoming!' : 'Repair crate incoming!', '#ffd740');
   }
 
@@ -838,14 +842,18 @@ export class Game {
       this.on.crate?.(t, `Found: ${it.name}`);
       return;
     }
-    if (c.type === 'health' || !c.famId) {
+    if (c.type === 'health' || !c.rolls) {
       const h = t.heal(35);
       this.fx.text(t.x, t.cy - 34, `+${h}`, '#69f0ae');
       this.message(`${t.name} picked up a repair crate`, '#69f0ae');
       this.on.crate?.(t, 'Repair crate: +35 HP');
       return;
     }
-    const fam = FAMILY_BY_ID[c.famId];
+    const all = FAMILIES.filter((f) => f.id !== 'shot');
+    const carried = t.arsenalAtRound || new Set();
+    const fresh = all.filter((f) => !carried.has(f.id));
+    const pool = fresh.length ? fresh : all;
+    const fam = pool[Math.floor(c.rolls[0] * pool.length)];
     if (!fam) return;
     if (!t.tiers[fam.id]) t.tiers[fam.id] = 1;
     t.addAmmo(fam.id, 1);

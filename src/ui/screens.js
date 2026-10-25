@@ -108,6 +108,7 @@ export const SETTING_DEFS = [
   { key: 'crates', label: 'Supply Drops', values: [[true, 'On'], [false, 'Off']] },
   { key: 'difficulty', label: 'Bot Skill', values: [['Easy', 'Easy'], ['Normal', 'Normal'], ['Hard', 'Hard']] },
   { key: 'arsenal', label: 'Weapons', values: [['unlocked', 'Unlocked only'], ['all', 'Everything']] },
+  { key: 'loadout', label: 'Loadout', values: [['random', 'Random, 2 per category'], ['full', 'Full arsenal']] },
   { key: 'balance', label: 'Level Balance', values: [[true, 'On'], [false, 'Off']] },
 ];
 

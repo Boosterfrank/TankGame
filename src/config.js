@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS = {
   map: 'random',
   difficulty: 'Normal',
   arsenal: 'unlocked',     // 'unlocked' | 'all'
+  loadout: 'random',       // 'random' (Shot + 2 weapons per category, favoring upgraded ones) | 'full' (everything unlocked)
   crates: true,
   balance: true,           // level handicap: higher-level players deal less damage to lower-level ones
 };

@@ -209,7 +209,7 @@ export class HUD {
       if (e.key === 'Escape') { if (search.value) { this.query = ''; this.renderWeapons(game, t); this.overlay.querySelector('.wsearch')?.focus(); } else this.closeOverlay(); }
       if (e.key === 'Enter') { const first = slice.find((id) => t.ammo(id) > 0); if (first) { game.selectWeapon(first); this.closeOverlay(); } }
     });
-    const head = el('div.ov-head', {}, [el('span', { text: `WEAPONS` }), search, el('small', { text: `${ids.filter((i) => t.ammo(i) > 0).length} ready · page ${this.page + 1}/${pages} · Esc to close` })]);
+    const head = el('div.ov-head', {}, [el('span', { text: `WEAPONS` }), search, el('small', { text: `${ids.filter((i) => t.ammo(i) > 0).length} ready of ${t.arsenal.size} in your loadout · supply drops add more · page ${this.page + 1}/${pages}` })]);
     if (!slice.length) grid.append(el('div.muted.room-empty', { text: q ? `No weapons match "${this.query}"` : 'No weapons' }));
     this.overlay.append(head, prev, grid, next);
   }

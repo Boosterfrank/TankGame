@@ -2,7 +2,7 @@
 // then degrade the best answer according to difficulty.
 import { PHYS, WORLD_W, WORLD_H } from './config.js';
 import { bestItem } from './items.js';
-import { getWeapon, FAMILIES } from './weapons.js';
+import { getWeapon, FAMILIES, pickLoadout } from './weapons.js';
 import { normSpec } from './projectile.js';
 import { rad, clamp } from './util.js';
 
@@ -173,11 +173,9 @@ export function planBotItems(game, bot) {
 }
 
 // Give a bot an arsenal appropriate to its level.
-export function botArsenal(bot, level, all = false) {
-  for (const f of FAMILIES) {
-    if (all || f.unlock <= level) {
-      bot.arsenal.set(f.id, f.ammo);
-      bot.tiers[f.id] = Math.min(f.tiers.length, 1 + Math.floor(Math.max(0, level - f.unlock) / 12));
-    }
-  }
+// With an rng, the bot draws a random loadout like the humans do (Shot + two per category).
+export function botArsenal(bot, level, all = false, rng = null) {
+  const list = FAMILIES.filter((f) => all || f.unlock <= level);
+  for (const f of list) bot.tiers[f.id] = Math.min(f.tiers.length, 1 + Math.floor(Math.max(0, level - f.unlock) / 12));
+  for (const f of rng ? pickLoadout(list, (x) => bot.tiers[x.id], rng) : list) bot.arsenal.set(f.id, f.ammo);
 }

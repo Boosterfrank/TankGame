@@ -290,7 +290,7 @@ export class Projectile {
         const n = tr.length / 2;
         for (let i = 1; i < n; i++) {
           const a = (i / n) * 0.9;
-          ctx.strokeStyle = rgba(s.color, a);
+          ctx.strokeStyle = s.rainbow ? `hsla(${(i * 24 + this.age * 260) % 360}, 100%, 65%, ${a})` : rgba(s.color, a);
           ctx.lineWidth = Math.max(1, s.r * 1.4 * (i / n));
           ctx.beginPath(); ctx.moveTo(tr[(i - 1) * 2], tr[(i - 1) * 2 + 1]); ctx.lineTo(tr[i * 2], tr[i * 2 + 1]); ctx.stroke();
         }

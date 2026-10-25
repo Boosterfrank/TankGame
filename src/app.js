@@ -379,7 +379,7 @@ export class App {
       if (!g) return;
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
       if (!e.repeat && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) { this.aimKey(e.code, 1, e.shiftKey); this.input.holds.set(e.code, { t: 0, acc: 0 }); }
-      if (e.code === 'Enter' && g.online) { if (this.hud.overlayMode) this.hud.closeOverlay(); this.openChat(); }
+      if ((e.code === 'Enter' || ((e.code === 'Slash' || e.code === 'KeyT') && !this.hud.overlayMode)) && g.online) { e.preventDefault(); if (this.hud.overlayMode) this.hud.closeOverlay(); this.openChat(); }
       else if (e.code === 'Space' || e.code === 'Enter') { if (this.hud.overlayMode) this.hud.closeOverlay(); else this.fire(); }
       else if (e.code === 'Backquote') { this.dev.toggle(); }
       else if (e.code === 'Tab' || e.code === 'KeyW') { this.hud.toggleOverlay('weapons'); }

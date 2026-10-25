@@ -366,26 +366,29 @@ export class Renderer {
     if (dropping) {
       const sway = Math.sin(t * 2 + c.x) * 0.08;
       ctx.rotate(sway);
-      ctx.fillStyle = c.type === 'weapon' ? 'rgba(255,183,77,0.85)' : 'rgba(105,240,174,0.85)';
+      ctx.fillStyle = c.type === 'weapon' ? 'rgba(255,183,77,0.85)' : c.type === 'item' ? 'rgba(206,147,216,0.85)' : 'rgba(105,240,174,0.85)';
       ctx.beginPath(); ctx.arc(0, -40, 26, Math.PI, 0); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(-26, -40); ctx.lineTo(-10, -12); ctx.moveTo(26, -40); ctx.lineTo(10, -12); ctx.moveTo(0, -40); ctx.lineTo(0, -12); ctx.stroke();
     }
     const w = 24, h = 20;
-    ctx.fillStyle = c.type === 'weapon' ? '#ffb300' : '#eceff1';
+    ctx.fillStyle = c.type === 'weapon' ? '#ffb300' : c.type === 'item' ? '#ab47bc' : '#eceff1';
     roundRect(ctx, -w / 2, -h / 2, w, h, 3); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2;
     roundRect(ctx, -w / 2, -h / 2, w, h, 3); ctx.stroke();
     if (c.type === 'weapon') {
       ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.moveTo(0, -h / 2); ctx.lineTo(0, h / 2); ctx.stroke();
+    } else if (c.type === 'item') {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 15px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('?', 0, 1); ctx.textBaseline = 'alphabetic';
     } else {
       ctx.fillStyle = '#43a047';
       ctx.fillRect(-2.5, -7, 5, 14); ctx.fillRect(-7, -2.5, 14, 5);
     }
     // glow pulse so it's easy to spot
     const p = 0.5 + 0.5 * Math.sin(t * 4);
-    ctx.strokeStyle = c.type === 'weapon' ? `rgba(255,214,0,${0.2 + p * 0.4})` : `rgba(105,240,174,${0.2 + p * 0.4})`;
+    ctx.strokeStyle = c.type === 'weapon' ? `rgba(255,214,0,${0.2 + p * 0.4})` : c.type === 'item' ? `rgba(206,147,216,${0.2 + p * 0.4})` : `rgba(105,240,174,${0.2 + p * 0.4})`;
     ctx.lineWidth = 2;
     roundRect(ctx, -w / 2 - 4, -h / 2 - 4, w + 8, h + 8, 5); ctx.stroke();
     ctx.restore();
@@ -409,10 +412,10 @@ export class Renderer {
       ctx.strokeStyle = `rgba(79,195,255,${0.35 + 0.2 * Math.sin(t * 5)})`; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(tk.x, tk.y - 13, 28, 0, Math.PI * 2); ctx.stroke();
     }
-    if (tk.doubleDamage) {
+    if (tk.damageMult > 1) {
       ctx.fillStyle = '#ff5252';
       ctx.font = 'bold 13px Rajdhani, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('x2', tk.x + 27, tk.y - 25);
+      ctx.fillText(`x${tk.damageMult}`, tk.x + 27, tk.y - 25);
     }
   }
 
@@ -427,7 +430,7 @@ export class Renderer {
     ctx.fillStyle = tk.locked && game.phase === 'aim' ? '#9e9e9e' : tk.connected === false ? '#ff8a80' : '#fff';
     ctx.fillText(tk.name, tk.x, y0 - 4);
     const title = tk.cosmetics ? titleName(tk.cosmetics.title) : '';
-    if (title) { ctx.font = 'italic 600 11px Rajdhani, sans-serif'; ctx.lineWidth = 2; ctx.strokeText(title.toUpperCase(), tk.x, y0 + 17); ctx.fillStyle = '#ffd740'; ctx.fillText(title.toUpperCase(), tk.x, y0 + 17); }
+    if (title) { ctx.save(); ctx.globalAlpha = 0.55; ctx.font = 'italic 600 11px Rajdhani, sans-serif'; ctx.lineWidth = 2; ctx.strokeText(title.toUpperCase(), tk.x, y0 + 17); ctx.fillStyle = '#ffd740'; ctx.fillText(title.toUpperCase(), tk.x, y0 + 17); ctx.restore(); }
     // hp
     ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(x0 - 1, y0 + 1, w + 2, 6);
     ctx.fillStyle = tk.hp / tk.maxHp > 0.5 ? '#43d14a' : tk.hp / tk.maxHp > 0.25 ? '#ffb300' : '#ff5252';

@@ -282,7 +282,7 @@ export class Room {
         if (s.phase !== 'game' || +msg.round !== s.round || s.locks[id]) return;
         s.locks[id] = {
           x: +msg.x || 0, shot: msg.shot && typeof msg.shot === 'object' ? { weaponId: clampStr(msg.shot.weaponId, 24), angle: +msg.shot.angle || 0, power: +msg.shot.power || 0 } : null,
-          items: Array.isArray(msg.items) ? msg.items.slice(0, 12) : [],
+          items: Array.isArray(msg.items) ? msg.items.slice(0, 24) : [],
           crates: Array.isArray(msg.crates) ? msg.crates.slice(0, 8).map((c) => +c || 0) : [],
           dev: Array.isArray(msg.dev) ? msg.dev.slice(0, 12).filter((o) => o && typeof o.type === 'string').map((o) => ({ type: clampStr(o.type, 16), x: +o.x || 0, v: +o.v || 0, seed: +o.seed || 0, kind: clampStr(o.kind, 12), style: clampStr(o.style, 16) })) : [],
           god: !!msg.god,

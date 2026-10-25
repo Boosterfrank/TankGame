@@ -80,9 +80,14 @@ next volley.
   The HUD shows your current modifier against the weakest enemy.
 - **Aiming guide.** A translucent range circle around your tank with a wedge whose length is your
   power, and a "power, angle" readout under the tank.
-- **Items** (repair, shield, teleport, double damage, fuel, ammo) never end your turn.
-- **Supply drops** parachute in; drive into them for weapons you may not even have unlocked. Their
-  contents are decided when they spawn, so online players always agree on what was inside.
+- **Items** never end your turn. Six types (repair, shield, teleport, damage boost, fuel, ammo), each
+  in three tiers, for example Repair Kit → Field Repair → Full Overhaul, or Double Damage → Heavy
+  Shells → Triple Damage. Everyone starts a battle with two of each type; the tier of each copy is
+  rolled from the shared seed with odds that improve with level (`tierOdds` in `src/items.js`: about
+  8% tier III at level 1, 40% at level 60).
+- **Supply drops** parachute in: weapon crates (weapons you may not even have unlocked), item crates
+  (an item, preferring types you have run out of) and repair crates. Their contents are decided when
+  they spawn, so online players always agree on what was inside.
 - Deathmatch or Team Battle, 100–300 HP, five wind levels, turn timers, bot difficulty,
   ten map styles and a sandbox mode that unlocks every weapon for one game.
 
@@ -95,7 +100,7 @@ next volley.
 | `A` `D` | Drive (uses fuel) |
 | Mouse drag on the battlefield | Aim from your tank toward the pointer |
 | `Space` | Fire (lock in your shot) |
-| `Enter` | Chat (online games) |
+| `Enter` / `T` / `/` | Chat (online games) |
 | `Tab` / `W` | Weapons grid (start typing to search, Enter picks the first match) |
 | `E` | Items |
 | `Esc` | Close panel / leave game |

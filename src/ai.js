@@ -1,6 +1,7 @@
 // Bot aiming: brute-force search over angle/power using the same physics constants as the engine,
 // then degrade the best answer according to difficulty.
 import { PHYS, WORLD_W, WORLD_H } from './config.js';
+import { bestItem } from './items.js';
 import { getWeapon, FAMILIES } from './weapons.js';
 import { normSpec } from './projectile.js';
 import { rad, clamp } from './util.js';
@@ -164,9 +165,10 @@ export function planBotShot(game, bot) {
 // Bots occasionally use items.
 export function planBotItems(game, bot) {
   const used = [];
-  if (bot.items.heal > 0 && bot.hp < bot.maxHp * 0.45) used.push('heal');
-  if (bot.items.shield > 0 && bot.hp < bot.maxHp * 0.6 && Math.random() < 0.6) used.push('shield');
-  if (bot.items.double > 0 && Math.random() < 0.12) used.push('double');
+  const heal = bestItem(bot, 'heal'), shield = bestItem(bot, 'shield'), dbl = bestItem(bot, 'double');
+  if (heal && bot.hp < bot.maxHp * 0.45) used.push(heal);
+  if (shield && bot.hp < bot.maxHp * 0.6 && Math.random() < 0.6) used.push(shield);
+  if (dbl && Math.random() < 0.12) used.push(dbl);
   return used;
 }
 

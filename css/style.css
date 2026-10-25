@@ -486,3 +486,16 @@ button.pl-ready:not(.not) { animation: pop 0.35s ease-out both; }
 .help-card ul { margin: 0; padding-left: 22px; font-size: 19px; line-height: 1.45; }
 .help-card table.keys { font-size: 19px; } .help-card table.keys td { padding: 4px 10px 4px 0; }
 .mode-hint { font-size: 15px; letter-spacing: 0.12em; color: var(--muted); } .mode-hint b { color: #cfd8dc; }
+
+/* item tiers, item crates, lobby titles */
+.igrid { grid-template-columns: repeat(6, 1fr); gap: 12px; left: 120px; right: 120px; top: 280px; }
+.icol { display: flex; flex-direction: column; gap: 10px; }
+.itile { position: relative; padding: 14px 10px; }
+.itile .iname { font-size: 19px; } .itile .idesc { font-size: 14px; line-height: 1.25; } .itile .icount { font-size: 18px; }
+.itile img { width: 48px; height: 48px; }
+.itier { position: absolute; top: 6px; right: 9px; font-weight: 700; font-size: 13px; letter-spacing: 0.1em; color: #cfd8dc; }
+.itile.tier2 { border-color: #b0bec5; } .itile.tier2 .itier { color: #e0e0e0; }
+.itile.tier3 { border-color: var(--yellow); box-shadow: 0 0 16px rgba(255,215,64,0.3); } .itile.tier3 .itier { color: var(--yellow); }
+div.itile.empty { opacity: 0.35; cursor: default; }
+.pl-namewrap { display: flex; flex-direction: column; line-height: 1.05; }
+.pl-title { font-style: italic; font-weight: 600; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--yellow); opacity: 0.85; }

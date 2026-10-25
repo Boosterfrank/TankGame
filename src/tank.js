@@ -15,6 +15,8 @@ export class Tank {
     this.hp = this.maxHp;
     this.armor = 0;
     this.fuel = PHYS.maxFuel;
+    this.maxFuel = PHYS.maxFuel;  // raised by fuel items
+    this.speedMult = 1;
     this.x = def.x || 0; this.y = def.y || 0; this.vy = 0;
     this.angle = def.angle ?? 60;
     this.power = 62;
@@ -27,7 +29,7 @@ export class Tank {
     this.items = {};            // itemId -> count
     this.locked = false;
     this.shot = null;
-    this.doubleDamage = false;
+    this.damageMult = 1;        // >1 while a damage item is armed (consumed by the next shot)
     this.stats = { damage: 0, kills: 0, shots: 0, hits: 0, selfDamage: 0 };
     this.xp = 0;
     this.lastHitBy = null;
@@ -111,7 +113,7 @@ export class Tank {
   // Drive left/right. Returns true if moved.
   move(dir, dt, terrain) {
     if (!this.alive || this.fuel <= 0 || !this.onGround) return false;
-    const dx = dir * PHYS.tankSpeed * dt;
+    const dx = dir * PHYS.tankSpeed * this.speedMult * dt;
     const nx = clamp(this.x + dx, 10, terrain.w - 10);
     const ny = terrain.surfaceY(Math.round(nx), Math.max(0, this.y - 16));
     if (this.y - ny > 14) return false; // too steep

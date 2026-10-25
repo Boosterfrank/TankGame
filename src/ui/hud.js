@@ -3,7 +3,7 @@ import { el, roman } from '../util.js';
 import { PHYS } from '../config.js';
 import { iconURL } from '../icons.js';
 import { getWeapon, FAMILY_BY_ID } from '../weapons.js';
-import { ITEMS } from '../items.js';
+import { ITEMS, ITEM_TYPES, TIER_NAMES, itemCount } from '../items.js';
 import { drawTankSprite } from '../tanksprite.js';
 
 export class HUD {
@@ -88,7 +88,7 @@ export class HUD {
       this.q('.hp .fill').style.width = `${(t.hp / t.maxHp) * 100}%`;
     });
     this.set('xp', Math.round(t.xp), (v) => { this.q('.xp').textContent = `+${v} XP`; });
-    this.set('fuel', Math.round(t.fuel), (v) => { this.q('.fuel-num').textContent = v; this.drawGauge(v / PHYS.maxFuel); });
+    this.set('fuel', `${Math.round(t.fuel)}/${t.maxFuel}`, (v) => { const [f, m] = v.split('/'); this.q('.fuel-num').textContent = f; this.drawGauge(+f / +m); });
     const w = game.currentWeapon(t) || getWeapon('shot');
     const ammo = t.ammo(w.id);
     this.set('wep', `${w.id}|${w.tier}|${ammo}`, () => {
@@ -100,7 +100,7 @@ export class HUD {
       const n = ammo === Infinity ? 0 : Math.min(ammo, 6);
       for (let i = 0; i < n; i++) pips.append(el('i'));
     });
-    const items = ITEMS.reduce((s, it) => s + (t.items[it.id] || 0), 0);
+    const items = itemCount(t);
     this.set('items', items, (v) => { this.q('.item-count').textContent = v ? `${v} left` : 'none left'; });
     let fireState, fireText;
     if (game.phase === 'fire') { fireState = 'busy'; fireText = 'INCOMING'; }
@@ -116,7 +116,7 @@ export class HUD {
     });
     this.set('urgent', !!(cur && !cur.locked && game.phase === 'aim' && game.settings.turnTime > 0 && game.turnTimer < 6), (v) => { this.q('.hud-fire').classList.toggle('urgent', v); });
     this.set('balance', Math.round((game.balanceFor(t) - 1) * 100), (v) => { this.q('.balance').textContent = v ? `BALANCE ${v > 0 ? '+' : ''}${v}% DMG` : ''; });
-    this.set('hint', game.online ? 'online' : 'local', (v) => { this.q('.mode-hint').innerHTML = v === 'online' ? 'PRESS <b>ENTER</b> TO CHAT' : '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>A D</b> DRIVE &nbsp; <b>SPACE</b> FIRE'; });
+    this.set('hint', game.online ? 'online' : 'local', (v) => { this.q('.mode-hint').innerHTML = v === 'online' ? '<b>ENTER</b>, <b>T</b> OR <b>/</b> TO CHAT<br><b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>SPACE</b> FIRE' : '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>A D</b> DRIVE &nbsp; <b>SPACE</b> FIRE'; });
     this.set('canAct', !!(cur && !cur.locked && game.phase === 'aim'), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
     if (this.overlayMode === 'weapons' && this.overlayTank !== t) this.renderWeapons(game, t);
   }
@@ -218,16 +218,26 @@ export class HUD {
     this.overlay.innerHTML = '';
     const head = el('div.ov-head', {}, [el('span', { text: 'ITEMS' }), el('small', { text: 'Using an item does not end your turn' })]);
     const grid = el('div.igrid');
-    for (const it of ITEMS) {
-      const n = t.items[it.id] || 0;
-      const tile = el('button.itile', { class: `itile${n <= 0 ? ' empty' : ''}` }, [
-        el('img', { src: iconURL(it.icon, it.color, 56), alt: '' }),
-        el('div.iname', { text: it.name }),
-        el('div.idesc', { text: it.desc }),
-        el('div.icount', { text: n > 0 ? `x${n}` : 'used' }),
-      ]);
-      tile.addEventListener('click', () => { if (game.useItem(it.id)) { this.closeOverlay(); } });
-      grid.append(tile);
+    // One column per item type; each tier you own gets its own tile. Empty types show a grey card.
+    for (const g of ITEM_TYPES) {
+      const owned = ITEMS.filter((it) => it.type === g.type && t.items[it.id] > 0);
+      const col = el('div.icol');
+      if (!owned.length) {
+        col.append(el('div.itile.empty', {}, [el('img', { src: iconURL(g.icon, '#546e7a', 56), alt: '' }), el('div.iname', { text: g.tiers[0].name }), el('div.idesc', { text: 'None left. Supply crates may hold more.' })]));
+      }
+      for (const it of owned) {
+        const n = t.items[it.id];
+        const tile = el('button.itile', { class: `itile tier${it.tier}` }, [
+          el('div.itier', { text: TIER_NAMES[it.tier - 1] }),
+          el('img', { src: iconURL(it.icon, it.color, 56), alt: '' }),
+          el('div.iname', { text: it.name }),
+          el('div.idesc', { text: it.desc }),
+          el('div.icount', { text: `x${n}` }),
+        ]);
+        tile.addEventListener('click', () => { if (game.useItem(it.id)) { this.closeOverlay(); } });
+        col.append(tile);
+      }
+      grid.append(col);
     }
     this.overlay.append(head, grid);
   }

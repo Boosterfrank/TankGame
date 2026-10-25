@@ -69,7 +69,7 @@ await guest.evaluate(() => { const g = window.__app.game; g.devOp({ type: 'crate
 await guest.waitForFunction(() => (window.__app.game.me.roundCrates || []).length === 1 && window.__app.game.crates.length === 0, null, { timeout: 5000 });
 // guest moves, both lock
 await guest.keyboard.down('KeyD'); await guest.waitForTimeout(400); await guest.keyboard.up('KeyD');
-await guest.evaluate(() => { const g = window.__app.game; g.current.angle = 120; g.current.power = 75; g.useItem('shield'); g.fire(); });
+await guest.evaluate(() => { const g = window.__app.game; g.current.angle = 120; g.current.power = 75; const sh = ['shield3', 'shield2', 'shield'].find((k) => g.me.items[k] > 0); g.useItem(sh); g.fire(); });
 await host.waitForFunction(() => window.__app.game.lockInfo?.count === 1);
 await host.evaluate(() => { const g = window.__app.game; g.current.angle = 60; g.current.power = 80; g.fire(); });
 await host.waitForFunction(() => window.__app.game.phase === 'fire', null, { timeout: 10000 });

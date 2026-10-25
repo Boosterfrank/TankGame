@@ -2,6 +2,7 @@
 // Open the gate by clicking the profile avatar in the top bar five times quickly; once unlocked,
 // the ` key or the DEV button toggles the panel.
 import { el, sha256, clamp, fmt } from '../util.js';
+import { ITEMS as ALL_ITEMS } from '../items.js';
 import { FAMILIES, ALL_FAMILIES, FAMILY_BY_ID, getWeapon } from '../weapons.js';
 import { saveProfile, resetProfile, MAX_LEVEL } from '../profile.js';
 import { MAP_STYLES } from '../terrain-gen.js';
@@ -171,7 +172,7 @@ export class DevTools {
         ]),
         el('div.dev-row', {}, [el('span', { text: 'Wind' }), windIn, btn('SET', () => g.devOp({ type: 'wind', v: clamp(+windIn.value || 0, -12, 12) }))]),
         el('div.dev-row', {}, [wepSel, btn('+5 AMMO', () => { if (me) { me.addAmmo(wepSel.value, 5); if (!me.tiers[wepSel.value]) me.tiers[wepSel.value] = 1; me.weaponId = wepSel.value; } }), btn('ALL +1', () => { if (me) for (const f of FAMILIES) { if (!me.tiers[f.id]) me.tiers[f.id] = 1; me.addAmmo(f.id, 1); } }), btn('H-BOMB', () => { if (me) { me.addAmmo('hbomb', 1); me.tiers.hbomb = 1; me.weaponId = 'hbomb'; } }, 'danger')]),
-        el('div.dev-row', {}, [btn('CRATE HERE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 80 * me.facing), 60, WORLD_W - 60), kind: 'weapon' }); }), btn('REPAIR CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x - 80 * me.facing), 60, WORLD_W - 60), kind: 'health' }); }), btn('ALL ITEMS', () => { if (me) for (const k of Object.keys(me.items)) me.items[k] = 3; })]),
+        el('div.dev-row', {}, [btn('CRATE HERE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 80 * me.facing), 60, WORLD_W - 60), kind: 'weapon' }); }), btn('REPAIR CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x - 80 * me.facing), 60, WORLD_W - 60), kind: 'health' }); }), btn('ITEM CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 140 * me.facing), 60, WORLD_W - 60), kind: 'item' }); }), btn('ALL ITEMS', () => { if (me) for (const it of ALL_ITEMS) me.items[it.id] = 3; })]),
         el('div.dev-row', {}, [mapSel, btn('REGEN TERRAIN', () => { g.devOp({ type: 'terrain', style: mapSel.value, seed: Math.floor(Math.random() * 1e9) }); this.note('terrain regenerated'); })]),
       );
       gameControls.push(el('div.muted', { text: online ? 'Online: heal, kills, crates, wind, terrain and god mode are sent to everyone with your next lock-in. Ammo and items stay local (shots carry the weapon).' : 'Offline sandbox: everything applies instantly.' }));

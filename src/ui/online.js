@@ -1,5 +1,6 @@
 // Online play screens: room browser and the server-driven lobby with chat.
 import { el, escapeHtml, RNG, roman } from '../util.js';
+import { titleName } from '../cosmetics.js';
 import { GAME_NAME, WORLD_W, WORLD_H, BOT_NAMES } from '../config.js';
 import { MAP_STYLES, generateHeights } from '../terrain-gen.js';
 import { Terrain } from '../terrain.js';
@@ -118,7 +119,8 @@ export function onlineLobbyScreen(app) {
       const row = el('div.player-row', { class: `player-row${pl.bot ? ' bot' : ' human'}${me ? ' me' : ''}`, style: { '--i': i } });
       row.append(el('div.pl-level', {}, [el('small', { text: pl.bot ? 'BOT' : pl.id === L.hostId ? 'HOST' : 'LVL' }), el('b', { text: pl.level })]));
       row.append(el('div.pl-avatar', { text: pl.name.slice(0, 2).toUpperCase() }));
-      row.append(el('div.pl-name', {}, [el('b', { text: pl.name }), el('small', { text: me ? 'You' : pl.id === L.hostId ? 'Host' : pl.connected === false ? 'Disconnected' : '' })]));
+      const title = titleName(pl.cosmetics?.title);
+      row.append(el('div.pl-name', {}, [el('div.pl-namewrap', {}, [title ? el('i.pl-title', { text: title }) : null, el('b', { text: pl.name })]), el('small', { text: me ? 'You' : pl.id === L.hostId ? 'Host' : pl.connected === false ? 'Disconnected' : '' })]));
       if (pl.bot && isHost) {
         row.append(el('div.pl-botlvl', {}, [
           el('button.mini', { text: '−', onclick: () => session.setBotLevel(pl.id, Math.max(1, pl.level - 5)) }),

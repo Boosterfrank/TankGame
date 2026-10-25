@@ -92,7 +92,7 @@ export function drawGlyph(c, key, s) {
     case 'firework': for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; line(c, u(0.5 + Math.cos(a) * 0.12), u(0.5 + Math.sin(a) * 0.12), u(0.5 + Math.cos(a) * 0.4), u(0.5 + Math.sin(a) * 0.4)); } break;
     case 'box': c.fillRect(u(0.18), u(0.3), u(0.64), u(0.55)); c.fillStyle = '#000'; c.globalAlpha = 0.4; c.fillRect(u(0.18), u(0.52), u(0.64), u(0.08)); c.globalAlpha = 1; c.fillStyle = '#fff'; break;
     case 'fuel': c.fillRect(u(0.22), u(0.2), u(0.42), u(0.65)); c.fillRect(u(0.3), u(0.1), u(0.26), u(0.1)); c.lineWidth = u(0.07); line(c, u(0.64), u(0.35), u(0.8), u(0.45)); line(c, u(0.8), u(0.45), u(0.8), u(0.75)); break;
-    case 'x2': c.font = `bold ${u(0.62)}px Rajdhani, Arial, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('x2', u(0.5), u(0.54)); break;
+    case 'x2': case 'x3': c.font = `bold ${u(0.62)}px Rajdhani, Arial, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(key, u(0.5), u(0.54)); break;
     case 'crosshair': c.lineWidth = u(0.07); circle(c, u(0.5), u(0.5), u(0.28), false); line(c, u(0.5), u(0.1), u(0.5), u(0.3)); line(c, u(0.5), u(0.7), u(0.5), u(0.9)); line(c, u(0.1), u(0.5), u(0.3), u(0.5)); line(c, u(0.7), u(0.5), u(0.9), u(0.5)); break;
     case 'tank': c.fillRect(u(0.18), u(0.5), u(0.64), u(0.2)); c.beginPath(); c.arc(u(0.5), u(0.5), u(0.14), Math.PI, 0); c.fill(); c.lineWidth = u(0.08); line(c, u(0.5), u(0.42), u(0.82), u(0.28)); c.beginPath(); c.roundRect ? c.roundRect(u(0.12), u(0.68), u(0.76), u(0.16), u(0.08)) : c.rect(u(0.12), u(0.68), u(0.76), u(0.16)); c.fill(); break;
     default: circle(c, u(0.5), u(0.5), u(0.28));

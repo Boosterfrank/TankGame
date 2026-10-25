@@ -8,7 +8,7 @@ import { Tank } from './tank.js';
 import { Projectile, normSpec } from './projectile.js';
 import { FX } from './fx.js';
 import { getWeapon, FAMILIES, FAMILY_BY_ID } from './weapons.js';
-import { ITEMS } from './items.js';
+import { ITEMS, ITEM_BY_ID, ITEM_TYPES, ITEM_TYPE_BY_ID, itemId, rollTier, itemCount } from './items.js';
 import { planBotShot, planBotItems, botArsenal } from './ai.js';
 import { TRAIL_STYLES, cleanCosmetics } from './cosmetics.js';
 
@@ -81,7 +81,9 @@ export class Game {
         for (const f of list) { t.arsenal.set(f.id, f.ammo); t.tiers[f.id] = def.tiers?.[f.id] || 1; }
         this.humans++;
       }
-      if (this.settings.items) for (const it of ITEMS) t.items[it.id] = 1;
+      if (this.settings.items) { // two of each type; the tier of each copy is rolled with level-based odds
+        for (const g of ITEM_TYPES) for (let k = 0; k < 2; k++) { const id = itemId(g.type, rollTier(this.rng.f(), t.level)); t.items[id] = (t.items[id] || 0) + 1; }
+      }
       if (this.settings.dummies && t.isBot) t.dummy = true; // dev test range: bots never fire
       this.tanks.push(t);
     });
@@ -129,7 +131,7 @@ export class Game {
   // ------------------------------------------------------------ phases
   beginAim() {
     this.phase = 'aim';
-    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; t.roundCrates = []; t.roundDev = []; }
+    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; t.roundCrates = []; t.roundDev = []; t.itemsAtRound = { ...t.items }; }
     this.lockInfo = null;
     const o = this.online;
     this.botsToPlan = (o && !o.isHost) || this.settings.dummies ? [] : this.tanks.filter((t) => t.isBot && t.alive);
@@ -327,7 +329,7 @@ export class Game {
   nextRound() {
     this.round++;
     this.rollWind();
-    for (const t of this.tanks) if (t.alive) t.fuel = Math.min(PHYS.maxFuel, t.fuel + PHYS.fuelRegen);
+    for (const t of this.tanks) if (t.alive) t.fuel = Math.min(t.maxFuel, t.fuel + PHYS.fuelRegen);
     if (this.settings.crates && this.crates.length < 2 && this.rng.chance(0.45)) this.spawnCrate();
     if (this.round > SUDDEN_DEATH_ROUND) {
       this.message('SUDDEN DEATH: everyone takes damage', '#ff5252');
@@ -471,24 +473,48 @@ export class Game {
     if (!tank || !tank.alive || !(tank.items[id] > 0)) return false;
     if (!replay && tank === this.current && (tank.locked || this.phase !== 'aim')) return false;
     payload = payload || {};
-    switch (id) {
-      case 'heal': { const h = tank.heal(40); this.fx.explosion(tank.x, tank.cy, 40, '#69f0ae', { heal: true }); this.fx.text(tank.x, tank.cy - 34, `+${h}`, '#69f0ae'); break; }
-      case 'shield': tank.armor = Math.min(100, tank.armor + PHYS.maxArmor); this.fx.rings.push({ x: tank.x, y: tank.cy, r0: 10, r1: 40, life: 0.6, max: 0.6, color: '#4fc3ff', w: 4 }); break;
+    const it = ITEM_BY_ID[id];
+    if (!it) return false;
+    switch (it.type) {
+      case 'heal': {
+        const h = tank.heal(it.amount === Infinity ? tank.maxHp : it.amount);
+        if (it.armor) tank.armor = Math.min(100, tank.armor + it.armor);
+        this.fx.explosion(tank.x, tank.cy, 40 + it.tier * 8, '#69f0ae', { heal: true }); this.fx.text(tank.x, tank.cy - 34, `+${h}`, '#69f0ae'); break;
+      }
+      case 'shield':
+        tank.armor = Math.min(100, tank.armor + it.amount);
+        if (it.heal) { const h = tank.heal(it.heal); this.fx.text(tank.x, tank.cy - 34, `+${h}`, '#69f0ae'); }
+        this.fx.rings.push({ x: tank.x, y: tank.cy, r0: 10, r1: 40 + it.tier * 6, life: 0.6, max: 0.6, color: '#4fc3ff', w: 4 }); break;
       case 'teleport': {
         if (payload.x == null) {
-          let x = 60, tries = 0;
-          do { x = 60 + Math.floor(Math.random() * (WORLD_W - 120)); tries++; } while (tries < 30 && this.tanks.some((o) => o !== tank && o.alive && Math.abs(o.x - x) < 90));
-          payload.x = x;
+          // Random candidates; better tiers consider more of them and keep the one farthest from
+          // enemies (High Ground also weighs in how high the spot is). Decided once, replayed by payload.
+          const enemies = this.tanks.filter((o) => o !== tank && o.alive && o.team !== tank.team);
+          let best = null, bestScore = -Infinity;
+          for (let i = 0; i < Math.max(1, it.picks) * 3; i++) {
+            const x = 60 + Math.floor(Math.random() * (WORLD_W - 120));
+            const near = Math.min(...enemies.map((o) => Math.abs(o.x - x)), WORLD_W);
+            if (near < 90 && i < Math.max(1, it.picks) * 3 - 1) continue;
+            let score = it.picks > 1 ? near : Math.random();
+            if (it.high) score += (WORLD_H - this.terrain.surfaceY(x, 0)) * 2;
+            if (score > bestScore) { bestScore = score; best = x; }
+            if (i + 1 >= it.picks && best != null) break;
+          }
+          payload.x = best ?? 60 + Math.floor(Math.random() * (WORLD_W - 120));
         }
         this.teleportTank(tank, payload.x, 0); break;
       }
-      case 'double': tank.doubleDamage = true; break;
-      case 'fuel': tank.fuel = PHYS.maxFuel; break;
+      case 'double': tank.damageMult = Math.max(tank.damageMult, it.mult); break;
+      case 'fuel':
+        tank.maxFuel = Math.max(tank.maxFuel, Math.round(PHYS.maxFuel * it.cap));
+        if (it.speed) tank.speedMult = Math.max(tank.speedMult, it.speed);
+        tank.fuel = tank.maxFuel; break;
       case 'ammo': {
         if (!payload.ids) {
           const ids = [...tank.arsenal.keys()].filter((k) => tank.arsenal.get(k) !== Infinity);
           payload.ids = [];
-          for (let i = 0; i < 3 && ids.length; i++) payload.ids.push(ids.splice(Math.floor(Math.random() * ids.length), 1)[0]);
+          if (it.count === Infinity) payload.ids = ids;
+          else for (let i = 0; i < it.count && ids.length; i++) payload.ids.push(ids.splice(Math.floor(Math.random() * ids.length), 1)[0]);
         }
         for (const k of payload.ids) tank.addAmmo(k, 1);
         break;
@@ -497,8 +523,7 @@ export class Game {
     tank.items[id]--;
     if (this.online && !replay) (tank.roundItems = tank.roundItems || []).push({ id, payload });
     this.audio.play('item');
-    const it = ITEMS.find((i) => i.id === id);
-    this.message(`${tank.name} used ${it?.name || id}`, '#ffd740');
+    this.message(`${tank.name} used ${it.name}`, '#ffd740');
     return true;
   }
 
@@ -516,8 +541,8 @@ export class Game {
     const w = getWeapon(shot.weaponId, tank.tier(shot.weaponId));
     if (!w) return;
     if (tank.ammo(w.id) !== Infinity && !(this.dev?.infAmmo && tank.isProfile)) tank.arsenal.set(w.id, Math.max(0, tank.ammo(w.id) - 1));
-    const dmgMul = tank.doubleDamage ? 2 : 1;
-    tank.doubleDamage = false;
+    const dmgMul = tank.damageMult || 1;
+    tank.damageMult = 1;
     tank.stats.shots++;
     tank.recoil = 1;
     if (w.spec.laser) { this.fireLaser(tank, w, shot.angle, dmgMul); return; }
@@ -751,12 +776,15 @@ export class Game {
   // contents are decided when they spawn, so lockstep clients agree on them without extra RNG use.
   spawnCrate(atX = null, type = null) {
     const x = atX ?? this.rng.int(90, WORLD_W - 90);
-    type = type || (this.rng.chance(0.7) ? 'weapon' : 'health');
+    if (!type) { const r = this.rng.f(); type = r < 0.5 ? 'weapon' : r < 0.8 && this.settings.items ? 'item' : 'health'; }
     const y = this.terrain.surfaceY(x, 0) - 12;
     const pool = FAMILIES.filter((f) => f.id !== 'shot');
     const famId = type === 'weapon' ? this.rng.pick(pool).id : null;
-    this.crates.push({ id: ++this.crateSeq, x, y, vy: 0, type, famId, landed: true, drop: 0, t: 0 });
-    this.message(type === 'weapon' ? 'Supply drop incoming!' : 'Repair crate incoming!', '#ffd740');
+    // Item crates decide what they hold when picked up (favoring types the picker ran out of), from
+    // rolls fixed at spawn so every client resolves the same contents.
+    const rolls = type === 'item' ? [this.rng.f(), this.rng.f()] : null;
+    this.crates.push({ id: ++this.crateSeq, x, y, vy: 0, type, famId, rolls, landed: true, drop: 0, t: 0 });
+    this.message(type === 'weapon' ? 'Supply drop incoming!' : type === 'item' ? 'Item crate incoming!' : 'Repair crate incoming!', '#ffd740');
   }
 
   updateCrates(dt) {
@@ -796,6 +824,20 @@ export class Game {
   grabCrate(t, c) {
     this.audio.play('pickup');
     this.fx.burst(c.x, c.y, 20, 140, '#ffd740', 0.6, 2.5, { add: true, g: 0.3 });
+    if (c.type === 'item') {
+      // Prefer item types the tank had none of at the start of the round (identical on every client).
+      const inv = t.itemsAtRound || t.items;
+      const missing = ITEM_TYPES.filter((g) => !g.tiers.some((tier) => inv[tier.id] > 0));
+      const pool = missing.length ? missing : ITEM_TYPES;
+      const g = pool[Math.floor(c.rolls[0] * pool.length)];
+      const id = itemId(g.type, rollTier(c.rolls[1], t.level));
+      t.items[id] = (t.items[id] || 0) + 1;
+      const it = ITEM_BY_ID[id];
+      this.fx.text(t.x, t.cy - 34, it.name, '#ce93d8');
+      this.message(`${t.name} found ${it.name}`, '#ce93d8');
+      this.on.crate?.(t, `Found: ${it.name}`);
+      return;
+    }
     if (c.type === 'health' || !c.famId) {
       const h = t.heal(35);
       this.fx.text(t.x, t.cy - 34, `+${h}`, '#69f0ae');
@@ -824,7 +866,7 @@ export class Game {
     switch (op.type) {
       case 'heal': if (tank?.alive) { tank.hp = tank.maxHp; tank.armor = PHYS.maxArmor; this.fx.explosion(tank.x, tank.cy, 40, '#69f0ae', { heal: true }); } break;
       case 'kill': if (tank) for (const o of this.tanks) if (o.alive && o !== tank && o.team !== tank.team) this.killTank(o, tank); break;
-      case 'crate': this.spawnCrate(clamp(Math.round(+op.x || 0), 60, WORLD_W - 60), op.kind === 'health' ? 'health' : 'weapon'); break;
+      case 'crate': this.spawnCrate(clamp(Math.round(+op.x || 0), 60, WORLD_W - 60), op.kind === 'health' ? 'health' : op.kind === 'item' ? 'item' : 'weapon'); break;
       case 'wind': this.wind = clamp(+op.v || 0, -12, 12); break;
       case 'terrain': {
         this.terrain.generate(String(op.style || 'random'), (+op.seed || 1) | 0);

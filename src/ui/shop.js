@@ -12,7 +12,7 @@ function drawTrailPreview(x, w, h, id) {
     const px = w * 0.22 + t * w * 0.7, py = h * 0.75 - Math.sin(t * Math.PI) * h * 0.55;
     let color = 'rgba(255,255,255,0.8)';
     if (style?.rainbow) color = `hsl(${i * 33}, 100%, 65%)`;
-    else if (style?.trail === 'fire') color = i % 2 ? '#ff7043' : '#ffb74d';
+    else if (style?.trail === 'fire') color = i % 2 ? style.color : '#ffb74d';
     else if (style) color = style.color;
     x.fillStyle = color;
     x.beginPath(); x.arc(px, py, style?.trail === 'smoke' ? 4 + t * 3 : 2.5 + (style ? 1 : 0), 0, Math.PI * 2); x.fill();

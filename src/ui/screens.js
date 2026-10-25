@@ -7,7 +7,7 @@ import { MAP_STYLES, generateHeights, spawnColumns } from '../terrain-gen.js';
 import { Terrain } from '../terrain.js';
 import { xpForLevel, unlockedFamilies, weaponTier, upgradeCost, buyUpgrade, nextMasteryXp, resetProfile, saveProfile } from '../profile.js';
 import { drawTankSprite } from '../tanksprite.js';
-import { cosmeticsOf } from '../cosmetics.js';
+import { cosmeticsOf, titleName } from '../cosmetics.js';
 
 const TIPS = [
   'Hold Shift while using the arrow keys for fine aiming.',
@@ -139,7 +139,7 @@ export function lobbyScreen(app) {
       row.append(el('div.pl-level', {}, [el('small', { text: pl.isBot ? 'BOT' : pl.isProfile ? 'YOU' : 'P' + (i + 1) }), el('b', { text: pl.isProfile ? app.profile.level : (pl.level || '-') })]));
       row.append(el('div.pl-avatar', { text: pl.name.slice(0, 2).toUpperCase() }));
       const nameWrap = el('div.pl-name');
-      if (pl.isProfile) nameWrap.append(el('b', { text: pl.name }), el('small', { text: 'Host' }));
+      if (pl.isProfile) { const title = titleName(cosmeticsOf(app.profile).title); nameWrap.append(el('div.pl-namewrap', {}, [title ? el('i.pl-title', { text: title }) : null, el('b', { text: pl.name })]), el('small', { text: 'Host' })); }
       else {
         const inp = el('input', { type: 'text', value: pl.name, maxlength: 14 });
         inp.addEventListener('change', () => { pl.name = inp.value.trim() || pl.name; });

@@ -278,6 +278,7 @@ export class Projectile {
         const n = tr.length / 2;
         for (let i = 0; i < n; i++) {
           const a = 0.15 + (i / n) * 0.75;
+          if (s.rainbow) ctx.fillStyle = `hsl(${(i * 28 + this.age * 260) % 360}, 100%, 65%)`;
           ctx.globalAlpha = a;
           ctx.beginPath(); ctx.arc(tr[i * 2], tr[i * 2 + 1], 1.8, 0, Math.PI * 2); ctx.fill();
         }
@@ -308,11 +309,12 @@ export class Projectile {
       return;
     }
     // glow + core
+    const bodyColor = s.rainbow ? `hsl(${(this.age * 260) % 360}, 100%, 65%)` : s.color;
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = rgba(s.color, 0.28);
+    ctx.fillStyle = s.rainbow ? 'rgba(255,255,255,0.25)' : rgba(s.color, 0.28);
     ctx.beginPath(); ctx.arc(this.x, this.y, s.r * 2.4 + 2, 0, Math.PI * 2); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = s.color;
+    ctx.fillStyle = bodyColor;
     ctx.beginPath(); ctx.arc(this.x, this.y, s.r, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.beginPath(); ctx.arc(this.x - s.r * 0.25, this.y - s.r * 0.25, Math.max(1, s.r * 0.45), 0, Math.PI * 2); ctx.fill();

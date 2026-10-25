@@ -21,6 +21,7 @@ await page.waitForTimeout(500);
 if (shots) await page.screenshot({ path: `${outDir}/01-title.png` });
 await page.click('.start-btn');
 await page.waitForTimeout(300);
+if (await page.$('.name-modal')) { await page.fill('.name-modal input', 'Tester'); await page.click('.name-modal .btn'); await page.waitForTimeout(300); }
 await page.keyboard.press('Escape');
 await page.waitForSelector('.menu-screen', { timeout: 10000 });
 await page.waitForTimeout(300);
@@ -36,6 +37,7 @@ await page.waitForTimeout(300);
 if (shots) await page.screenshot({ path: `${outDir}/04-armory.png` });
 await page.click('.armory-right > button.btn');
 await page.click('text=QUICK PLAY');
+await page.click('.choice-buttons button:has-text("VS BOTS")');
 await page.waitForTimeout(2200);
 if (shots) await page.screenshot({ path: `${outDir}/05-game.png` });
 // open weapons grid

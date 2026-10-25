@@ -1,5 +1,6 @@
 // Local player profile: level, XP, gears, weapon mastery. Persisted in localStorage.
 import { FAMILIES, FAMILY_BY_ID, MASTERY_XP, tierForMastery } from './weapons.js';
+import { defaultCosmetics, cosmeticItem, ownsCosmetic } from './cosmetics.js';
 
 const KEY = 'utg.profile.v1';
 
@@ -9,7 +10,8 @@ export function defaultProfile() {
     level: 1, xp: 0, gears: 0,
     weaponXp: {}, weaponTier: {},
     stats: { games: 0, wins: 0, kills: 0, damage: 0, shots: 0 },
-    settings: { sound: true, volume: 0.7, music: true, musicVolume: 0.6, intro: true },
+    settings: { sound: true, volume: 0.7, music: true, musicVolume: 0.6, intro: true, named: false },
+    cosmetics: defaultCosmetics(),
     created: Date.now(),
   };
 }
@@ -21,6 +23,8 @@ export function loadProfile() {
     const p = { ...defaultProfile(), ...JSON.parse(raw) };
     p.stats = { ...defaultProfile().stats, ...(p.stats || {}) };
     p.settings = { ...defaultProfile().settings, ...(p.settings || {}) };
+    p.cosmetics = { ...defaultCosmetics(), ...(p.cosmetics || {}) };
+    p.cosmetics.equipped = { ...defaultCosmetics().equipped, ...(p.cosmetics.equipped || {}) };
     return p;
   } catch (e) { return defaultProfile(); }
 }
@@ -61,11 +65,32 @@ export function nextMasteryXp(p, famId) {
   return MASTERY_XP[t];
 }
 
+// Tier upgrades cost more for weapons that unlock later and for higher tiers:
+// a level-1 weapon runs 25/35/50 gears, a level-50 weapon 170/270/375.
 export function upgradeCost(p, famId) {
   const t = weaponTier(p, famId);
   const fam = FAMILY_BY_ID[famId];
   if (t >= fam.tiers.length) return null;
-  return 120 * t;
+  const base = 20 + fam.unlock * 3;
+  const mult = [1, 1.6, 2.2][t - 1] || 2.2;
+  return Math.round((base * mult) / 5) * 5;
+}
+
+export function buyCosmetic(p, slot, id) {
+  const item = cosmeticItem(slot, id);
+  if (!item || ownsCosmetic(p, slot, id) || p.gears < item.price) return false;
+  p.gears -= item.price;
+  p.cosmetics.owned.push(`${slot}:${id}`);
+  p.cosmetics.equipped[slot] = id;
+  saveProfile(p);
+  return true;
+}
+
+export function equipCosmetic(p, slot, id) {
+  if (!ownsCosmetic(p, slot, id)) return false;
+  p.cosmetics.equipped[slot] = id;
+  saveProfile(p);
+  return true;
 }
 
 export function buyUpgrade(p, famId) {
@@ -79,7 +104,7 @@ export function buyUpgrade(p, famId) {
 
 // Apply a finished game's results for the profile player. Returns a summary for the results screen.
 export function applyGameResults(p, { xp, kills, damage, shots, won, mastery }) {
-  const summary = { xp, gears: 0, levelUps: [], unlocks: [], masteryUps: [], before: p.level };
+  const summary = { xp, gears: 0, levelUps: [], unlocks: [], masteryUps: [], before: p.level, beforeXp: p.xp };
   p.stats.games++; if (won) p.stats.wins++;
   p.stats.kills += kills; p.stats.damage += Math.round(damage); p.stats.shots += shots;
   const gears = 8 + kills * 3 + (won ? 12 : 0) + Math.round(damage / 30);

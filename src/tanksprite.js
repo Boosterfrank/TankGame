@@ -12,7 +12,108 @@ function rr(ctx, x, y, w, h, r) {
   if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
 }
 
-// o: { x, y, color, tilt, facing, angle, recoil, alive, scale, glow }
+function hexPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + Math.PI / 6; const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+  ctx.closePath();
+}
+
+// Paint patterns, clipped to the hull, in shades of the team color.
+function drawPattern(ctx, id, light, dark, hullPath) {
+  if (!id || id === 'none') return;
+  ctx.save();
+  hullPath(); ctx.clip();
+  ctx.globalAlpha = 0.6;
+  switch (id) {
+    case 'stripes':
+      ctx.fillStyle = light;
+      for (const x of [-12, -3]) { ctx.beginPath(); ctx.moveTo(x, -10); ctx.lineTo(x + 5, -10); ctx.lineTo(x + 11, -20); ctx.lineTo(x + 6, -20); ctx.closePath(); ctx.fill(); }
+      break;
+    case 'camo':
+      for (const [x, y, rx, ry, c] of [[-14, -13, 6, 3, dark], [-4, -17, 7, 3, light], [6, -12, 6, 3, dark], [15, -16, 5, 2.5, dark], [-9, -18, 4, 2, dark], [12, -11, 4, 2, light]]) {
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    case 'hex':
+      ctx.strokeStyle = dark; ctx.lineWidth = 0.8;
+      for (let r = 0; r < 3; r++) for (let i = -4; i < 5; i++) { hexPath(ctx, i * 6 + (r % 2) * 3, -18 + r * 3.6, 2.2); ctx.stroke(); }
+      break;
+    case 'chevron':
+      ctx.strokeStyle = light; ctx.lineWidth = 2;
+      for (const x of [-11, -3, 5]) { ctx.beginPath(); ctx.moveTo(x, -19); ctx.lineTo(x + 5, -14.5); ctx.lineTo(x, -10); ctx.stroke(); }
+      break;
+    case 'flames':
+      ctx.globalAlpha = 0.9;
+      for (const [y, len, c] of [[-17, 16, '#ff9800'], [-13.5, 22, '#ff9800'], [-11, 13, '#ff9800'], [-17, 9, '#ffeb3b'], [-13.5, 13, '#ffeb3b']]) {
+        ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(-22, y - 1.3); ctx.quadraticCurveTo(-22 + len * 0.55, y - 2.8, -22 + len, y); ctx.quadraticCurveTo(-22 + len * 0.55, y + 2.8, -22, y + 1.3); ctx.closePath(); ctx.fill();
+      }
+      break;
+    case 'carbon':
+      ctx.strokeStyle = dark; ctx.lineWidth = 0.7;
+      for (let x = -30; x < 30; x += 3) { ctx.beginPath(); ctx.moveTo(x, -10); ctx.lineTo(x + 10, -20); ctx.stroke(); }
+      ctx.globalAlpha = 0.3;
+      for (let x = -30; x < 30; x += 3) { ctx.beginPath(); ctx.moveTo(x, -20); ctx.lineTo(x + 10, -10); ctx.stroke(); }
+      break;
+    case 'checker':
+      ctx.fillStyle = dark;
+      for (let i = -5; i < 6; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) ctx.fillRect(i * 5 - 1, -19.5 + j * 4.75, 5, 4.75);
+      break;
+    case 'bolt':
+      ctx.globalAlpha = 0.9; ctx.fillStyle = '#fff176';
+      ctx.beginPath(); ctx.moveTo(-6, -19.5); ctx.lineTo(3, -19.5); ctx.lineTo(0, -15); ctx.lineTo(6, -15); ctx.lineTo(-5, -10); ctx.lineTo(-1, -14); ctx.lineTo(-8, -14); ctx.closePath(); ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+// Turret accessories (local tank space: turret spans x -10..7, top at y -28).
+function drawAccessory(ctx, id, light, dark) {
+  if (!id || id === 'none') return;
+  ctx.save();
+  switch (id) {
+    case 'antenna':
+      ctx.strokeStyle = '#cfd8dc'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-9, -27); ctx.lineTo(-12, -42); ctx.stroke();
+      ctx.fillStyle = light; ctx.beginPath(); ctx.moveTo(-12, -42); ctx.lineTo(-4, -39.5); ctx.lineTo(-12, -37); ctx.closePath(); ctx.fill();
+      break;
+    case 'tophat':
+      ctx.fillStyle = '#111'; ctx.fillRect(-11.5, -30, 15, 2.2); ctx.fillRect(-8.5, -40, 9, 10.5);
+      ctx.fillStyle = '#c62828'; ctx.fillRect(-8.5, -32.5, 9, 2.2);
+      break;
+    case 'crown':
+      ctx.fillStyle = '#ffd740';
+      ctx.beginPath(); ctx.moveTo(-9, -28.5); ctx.lineTo(-9, -36); ctx.lineTo(-6, -31.5); ctx.lineTo(-3, -37.5); ctx.lineTo(0, -31.5); ctx.lineTo(3, -36); ctx.lineTo(3, -28.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e53935'; for (const x of [-7, -3, 1]) { ctx.beginPath(); ctx.arc(x, -30, 0.9, 0, Math.PI * 2); ctx.fill(); }
+      break;
+    case 'halo':
+      ctx.strokeStyle = '#ffeb3b'; ctx.lineWidth = 1.8; ctx.shadowColor = '#ffeb3b'; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.ellipse(-1.5, -36.5, 8, 2.4, 0, 0, Math.PI * 2); ctx.stroke();
+      break;
+    case 'horns':
+      ctx.fillStyle = '#e53935';
+      ctx.beginPath(); ctx.moveTo(-10, -26.5); ctx.quadraticCurveTo(-14, -31, -13.5, -38); ctx.quadraticCurveTo(-9, -32, -6, -27.5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(4, -26.5); ctx.quadraticCurveTo(9, -31, 9.5, -38); ctx.quadraticCurveTo(4, -32, 1, -27.5); ctx.closePath(); ctx.fill();
+      break;
+    case 'mohawk':
+      ctx.fillStyle = light;
+      for (let x = -9; x <= 3; x += 3) { ctx.beginPath(); ctx.moveTo(x, -27.5); ctx.lineTo(x + 3, -27.5); ctx.lineTo(x + 1.5, -36 + Math.abs(x + 3) * 0.4); ctx.closePath(); ctx.fill(); }
+      break;
+    case 'spikes':
+      ctx.fillStyle = '#b0bec5';
+      for (const x of [-8.5, -4.5, -0.5, 3.5]) { ctx.beginPath(); ctx.moveTo(x, -27.5); ctx.lineTo(x + 2.4, -27.5); ctx.lineTo(x + 1.2, -34); ctx.closePath(); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(-10.5, -25); ctx.lineTo(-15.5, -24); ctx.lineTo(-10.5, -22); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(7.5, -25); ctx.lineTo(12.5, -24); ctx.lineTo(7.5, -22); ctx.closePath(); ctx.fill();
+      break;
+    case 'propeller':
+      ctx.fillStyle = '#ff5252'; ctx.beginPath(); ctx.arc(-1.5, -28, 5.5, Math.PI, 0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(-1.5 - 5.5, -29.5, 11, 1.2);
+      ctx.strokeStyle = '#ffeb3b'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-1.5, -33.5); ctx.lineTo(-1.5, -37); ctx.stroke();
+      ctx.fillStyle = '#eceff1'; ctx.beginPath(); ctx.ellipse(-1.5, -37, 7, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+// o: { x, y, color, tilt, facing, angle, recoil, alive, scale, glow, skin:{pattern, accessory} }
 // (x, y) is the ground contact point under the middle of the tracks.
 export function drawTankSprite(ctx, o) {
   const s = o.scale || 1, facing = o.facing || 1, alive = o.alive !== false;
@@ -56,6 +157,10 @@ export function drawTankSprite(ctx, o) {
   ctx.strokeStyle = dark; ctx.lineWidth = 1; ctx.stroke();
   rr(ctx, -8, -27.3, 12, 2.2, 1); ctx.fillStyle = light; ctx.fill();
   ctx.beginPath(); ctx.arc(-4.5, -28.2, 2.7, Math.PI, 0); ctx.fillStyle = mid; ctx.fill();
+  if (o.skin && alive) {
+    drawPattern(ctx, o.skin.pattern, light, dark, hull);
+    drawAccessory(ctx, o.skin.accessory, light, dark);
+  }
   ctx.restore();
   if (!alive) return;
   // barrel in world angle (independent of tilt and mirroring)

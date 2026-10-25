@@ -4,6 +4,7 @@ import { rgba, fmtTime, rad, RNG, hexToRgb } from './util.js';
 import { getWeapon } from './weapons.js';
 import { normSpec } from './projectile.js';
 import { drawTankSprite } from './tanksprite.js';
+import { titleName } from './cosmetics.js';
 
 const THEMES = [
   ['#6a1b9a', '#b71c1c', '#f9a825', '#1a237e', '#4a148c'],
@@ -397,7 +398,7 @@ export class Renderer {
   // Draws any tank-like object (used by the game, the intro and previews).
   // Draws any tank-like object (used by the game, the intro and previews).
   drawTankBody(ctx, tk, color, t) {
-    drawTankSprite(ctx, { x: tk.x, y: tk.y, color, tilt: tk.tilt, facing: tk.facing, angle: tk.angle, recoil: tk.recoil || 0, alive: tk.alive });
+    drawTankSprite(ctx, { x: tk.x, y: tk.y, color, tilt: tk.tilt, facing: tk.facing, angle: tk.angle, recoil: tk.recoil || 0, alive: tk.alive, skin: tk.cosmetics });
     if (!tk.alive) {
       const f = 0.5 + 0.5 * Math.sin(t * 9 + tk.id);
       ctx.fillStyle = `rgba(255,120,40,${0.3 + f * 0.4})`;
@@ -425,6 +426,8 @@ export class Renderer {
     ctx.strokeText(tk.name, tk.x, y0 - 4);
     ctx.fillStyle = tk.locked && game.phase === 'aim' ? '#9e9e9e' : tk.connected === false ? '#ff8a80' : '#fff';
     ctx.fillText(tk.name, tk.x, y0 - 4);
+    const title = tk.cosmetics ? titleName(tk.cosmetics.title) : '';
+    if (title) { ctx.font = 'italic 600 11px Rajdhani, sans-serif'; ctx.lineWidth = 2; ctx.strokeText(title.toUpperCase(), tk.x, y0 + 17); ctx.fillStyle = '#ffd740'; ctx.fillText(title.toUpperCase(), tk.x, y0 + 17); }
     // hp
     ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(x0 - 1, y0 + 1, w + 2, 6);
     ctx.fillStyle = tk.hp / tk.maxHp > 0.5 ? '#43d14a' : tk.hp / tk.maxHp > 0.25 ? '#ffb300' : '#ff5252';

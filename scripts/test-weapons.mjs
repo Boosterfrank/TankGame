@@ -13,6 +13,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.
 await page.goto('http://localhost:8080/', { waitUntil: 'load' });
 await page.click('.start-btn');
 await page.waitForTimeout(300);
+if (await page.$('.name-modal')) { await page.fill('.name-modal input', 'Tester'); await page.click('.name-modal .btn'); await page.waitForTimeout(300); }
 await page.keyboard.press('Escape');
 await page.waitForSelector('.menu-screen', { timeout: 10000 });
 await page.waitForTimeout(200);

@@ -43,10 +43,7 @@ export class HUD {
       <button class="hud-panel hud-fire" title="Fire (Space)">FIRE</button>
       <div class="hud-panel hud-mode">
         <div class="mode-top"><div><div class="mode-name">DEATHMATCH</div><div class="mode-desc">Destroy your opponents</div></div><div class="mode-skull"></div></div>
-        <div class="aim-row">
-          <div class="aim-group"><span class="aim-label">ANGLE</span><button class="adj" data-k="angle" data-d="-1">&minus;</button><b class="aim-angle">60</b><button class="adj" data-k="angle" data-d="1">+</button></div>
-          <div class="aim-group"><span class="aim-label">POWER</span><button class="adj" data-k="power" data-d="-1">&minus;</button><b class="aim-power">62</b><button class="adj" data-k="power" data-d="1">+</button></div>
-        </div>
+        <div class="mode-hint"></div>
       </div>
       <button class="hud-panel hud-leave">LEAVE<small>GAME</small></button>`;
     this.q = (s) => h.querySelector(s);
@@ -54,14 +51,6 @@ export class HUD {
     this.q('.hud-leave').addEventListener('click', () => this.app.confirmLeave());
     this.q('.hud-weapons').addEventListener('click', () => this.toggleOverlay('weapons'));
     this.q('.hud-items').addEventListener('click', () => this.toggleOverlay('items'));
-    for (const b of h.querySelectorAll('.adj')) {
-      let timer = null, rep = null;
-      const step = () => { const d = +b.dataset.d; if (b.dataset.k === 'angle') this.app.game?.adjustAngle(d); else this.app.game?.adjustPower(d); };
-      const start = (e) => { e.preventDefault(); step(); timer = setTimeout(() => { rep = setInterval(step, 50); }, 350); };
-      const stop = () => { clearTimeout(timer); clearInterval(rep); timer = rep = null; };
-      b.addEventListener('pointerdown', start);
-      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
-    }
     for (const b of h.querySelectorAll('.mv')) {
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); this.app.input.moveBtn = +b.dataset.dir; });
       for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { this.app.input.moveBtn = 0; });
@@ -126,9 +115,8 @@ export class HUD {
       this.q('.mode-desc').textContent = m === 'team' ? 'Eliminate the other teams' : 'Destroy your opponents';
     });
     this.set('urgent', !!(cur && !cur.locked && game.phase === 'aim' && game.settings.turnTime > 0 && game.turnTimer < 6), (v) => { this.q('.hud-fire').classList.toggle('urgent', v); });
-    this.set('angle', `${Math.round(t.displayAngle)}|${t.facing}`, (v) => { const [d, f] = v.split('|'); this.q('.aim-angle').innerHTML = +f < 0 ? `&#9664;${d}&deg;` : `${d}&deg;&#9654;`; });
     this.set('balance', Math.round((game.balanceFor(t) - 1) * 100), (v) => { this.q('.balance').textContent = v ? `BALANCE ${v > 0 ? '+' : ''}${v}% DMG` : ''; });
-    this.set('power', Math.round(t.power), (v) => { this.q('.aim-power').textContent = v; });
+    this.set('hint', game.online ? 'online' : 'local', (v) => { this.q('.mode-hint').innerHTML = v === 'online' ? 'PRESS <b>ENTER</b> TO CHAT' : '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>A D</b> DRIVE &nbsp; <b>SPACE</b> FIRE'; });
     this.set('canAct', !!(cur && !cur.locked && game.phase === 'aim'), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
     if (this.overlayMode === 'weapons' && this.overlayTank !== t) this.renderWeapons(game, t);
   }

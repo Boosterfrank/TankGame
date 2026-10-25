@@ -127,7 +127,7 @@ export class Room {
     return {
       type: 'lobby', code: s.code, phase: s.phase, hostId: s.hostId, settings: s.settings, isPublic: s.isPublic,
       startIn: s.startAt ? Math.max(0, s.startAt - Date.now()) : null,
-      players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, ready: p.ready, bot: !!p.bot, connected: p.connected !== false }; }),
+      players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, ready: p.ready, bot: !!p.bot, connected: p.connected !== false, cosmetics: p.cosmetics || null }; }),
     };
   }
 
@@ -159,6 +159,7 @@ export class Room {
           team: Math.max(1, Math.min(4, +msg.team || ((s.order.length % 4) + 1))), ready: false, connected: true,
           unlockedIds: Array.isArray(msg.unlockedIds) ? msg.unlockedIds.slice(0, 400).map((x) => clampStr(x, 24)) : ['shot'],
           tiers: msg.tiers && typeof msg.tiers === 'object' ? Object.fromEntries(Object.entries(msg.tiers).slice(0, 400).map(([k, v]) => [clampStr(k, 24), Math.max(1, Math.min(4, +v || 1))])) : {},
+          cosmetics: msg.cosmetics && typeof msg.cosmetics === 'object' ? Object.fromEntries(['pattern', 'accessory', 'trail', 'title'].map((k) => [k, clampStr(msg.cosmetics[k] || 'none', 16)])) : null,
         };
         s.order.push(id);
         if (!s.hostId || !s.players[s.hostId]) s.hostId = id;
@@ -255,7 +256,7 @@ export class Room {
     await this.save();
     this.broadcast({
       type: 'start', seed: s.seed, settings: s.settings, hostId: s.hostId, round: 1, deadline: s.deadline,
-      players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, bot: !!p.bot, unlockedIds: p.unlockedIds, tiers: p.tiers }; }),
+      players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, bot: !!p.bot, unlockedIds: p.unlockedIds, tiers: p.tiers, cosmetics: p.cosmetics || null }; }),
     });
     await this.publish();
     await this.armAlarm();

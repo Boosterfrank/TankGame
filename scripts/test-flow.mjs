@@ -14,14 +14,15 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.
 await page.goto('http://localhost:8080/', { waitUntil: 'load' });
 await page.click('.start-btn');
 await page.waitForTimeout(300);
+if (await page.$('.name-modal')) { await page.fill('.name-modal input', 'Tester'); await page.click('.name-modal .btn'); await page.waitForTimeout(300); }
 await page.keyboard.press('Escape');
 await page.waitForSelector('.menu-screen', { timeout: 10000 });
-await page.click('text=HOW TO PLAY'); await page.waitForTimeout(200);
-if (shots) await page.screenshot({ path: `${outDir}/10-help.png` });
-await page.click('.help-foot button');
+await page.click('text=SHOP'); await page.waitForTimeout(300);
+if (shots) await page.screenshot({ path: `${outDir}/10-shop.png` });
+await page.click('.shop-left > button.btn');
 await page.click('text=SETTINGS'); await page.waitForTimeout(200);
 if (shots) await page.screenshot({ path: `${outDir}/11-settings.png` });
-await page.click('.settings-body > button');
+await page.click('.settings-col > button.btn');
 await page.click('text=CUSTOM GAME'); await page.waitForTimeout(200);
 await page.click('text=+ ADD LOCAL PLAYER');
 await page.click('.srow.clickable:has-text("Mode")');   // -> Team Battle
@@ -70,6 +71,13 @@ const res = await page.evaluate(async () => {
 console.log(JSON.stringify({ passVisible, aim, ...res }, null, 1));
 await page.evaluate(() => { const g = window.__app.game; if (g.waitingPass) g.confirmPass(); g.skipToEnd(); });
 await page.waitForTimeout(1500);
+if (await page.$('.rewards-screen')) {
+  if (shots) await page.screenshot({ path: `${outDir}/17-rewards.png` });
+  await page.click('.rw-skip'); // skip the count-up
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.rw-continue')).visibility === 'visible', null, { timeout: 10000 });
+  await page.click('.rw-continue');
+  await page.waitForFunction(() => window.__app.screenName === 'results', null, { timeout: 5000 });
+}
 if (shots) await page.screenshot({ path: `${outDir}/16-results-team.png` });
 const final = await page.evaluate(() => ({ screen: window.__app.screenName, msgs: window.__app.game?.messages.map((m) => m.text) }));
 console.log(JSON.stringify(final));

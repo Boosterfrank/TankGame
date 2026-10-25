@@ -16,6 +16,10 @@ npm start          # zero-dependency static server on http://localhost:8080
 Any static file server works (`python3 -m http.server 8080`, Cloudflare Pages, GitHub Pages…).
 The game uses ES modules, so it must be served over HTTP rather than opened from `file://`.
 
+The first start asks for a commander name (changeable later in Settings). QUICK PLAY asks whether
+to find a public online room or fight five bots offline; CUSTOM GAME and PLAY ONLINE set everything
+up by hand.
+
 ## Online play (Cloudflare Workers)
 
 Online rooms run on a tiny Cloudflare Worker with Durable Objects (`worker/`). The Worker only
@@ -60,7 +64,15 @@ next volley.
 - **XP and levels.** Damage you deal earns XP. Each level unlocks new weapon families
   (level 1 starts with 4, everything is unlocked by level 50).
 - **Mastery.** Each family levels from Tier I to Tier IV through the damage it deals,
-  gaining damage, blast radius and extra shells. Gears (earned per game) can buy a tier early.
+  gaining damage, blast radius and extra shells. Gears (earned per game) can buy a tier early:
+  `(20 + unlockLevel × 3) × {1, 1.6, 2.2}` rounded to 5, so a level-1 weapon costs 25/35/50 and a
+  level-50 weapon 170/270/375 (`upgradeCost` in `src/profile.js`).
+- **Rewards.** After a battle a full-screen sequence counts up the XP and gears, walks the XP bar
+  through each level-up and slides in the weapons unlocked and mastery tiers gained. Click to skip.
+- **Shop.** Gears also buy cosmetics (`src/cosmetics.js`): hull paint (stripes, camo, hex, flames…),
+  turret accessories (crown, top hat, halo, horns…), shot trails that recolor plain shells (rainbow,
+  fire, ice…) and titles shown under your name. Paint, accessories and titles are visible to
+  everyone online; bots occasionally dress up too.
 - **Flares.** Air-support weapons (Rain, Meteor Shower, Airstrike, Solar Flare and friends) fire a
   marker flare that bounces to a stop; the strike lands exactly where the flare rests.
 - **Level balance.** Higher-level tanks deal up to 40% less damage to lower-level ones and
@@ -82,7 +94,8 @@ next volley.
 | `↑` `↓` / mouse wheel | Power, one point per step |
 | `A` `D` | Drive (uses fuel) |
 | Mouse drag on the battlefield | Aim from your tank toward the pointer |
-| `Space` / `Enter` | Fire (lock in your shot) |
+| `Space` | Fire (lock in your shot) |
+| `Enter` | Chat (online games) |
 | `Tab` / `W` | Weapons grid (start typing to search, Enter picks the first match) |
 | `E` | Items |
 | `Esc` | Close panel / leave game |
@@ -100,7 +113,8 @@ next volley.
   during battles. The visualizer keeps running while music is muted (the MUTE button in the
   now-playing chip); the volume slider lives in Settings.
 - **Transitions.** The battlefield fades to black and back when the background battle resets, and
-  fades in after the start button and when a match begins.
+  fades in after the start button and when a match begins. The screen stays dark until the tanks have
+  dropped onto the terrain, so the fade-in reveals a settled battlefield.
 
 ## Developer tools
 
@@ -128,13 +142,16 @@ src/render.js         sky, fog, tanks, projectiles, aiming guide, in-world overl
 src/tanksprite.js     procedural tank sprite shared by game, intro, HUD and lobby
 src/fx.js             particles, explosions, beams, floating text, screen shake
 src/audio.js          procedural WebAudio sound effects
-src/profile.js        localStorage profile: XP, levels, gears, mastery
+src/profile.js        localStorage profile: XP, levels, gears, mastery, cosmetics
+src/cosmetics.js      shop catalog (paint, accessories, trails, titles) and trail styles
 src/icons.js          procedural pictogram icons for weapons and items
 src/music.js          music playback + analyser for the visualizer
 src/intro.js          opening cutscene
 src/online.js         online session: relay protocol client and game bridge
 src/ui/hud.js         bottom HUD, weapons grid, items panel
-src/ui/screens.js     title, hub, lobby, armory, help, settings, results
+src/ui/screens.js     title, hub, lobby, armory, settings (with how-to-play), results
+src/ui/shop.js        cosmetics shop with live previews
+src/ui/rewards.js     post-battle rewards sequence
 src/ui/online.js      room browser and online lobby with chat
 src/ui/devtools.js    password-gated developer console
 src/app.js            screen flow, input, fixed-timestep render loop

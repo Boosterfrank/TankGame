@@ -7,6 +7,7 @@ import { MAP_STYLES, generateHeights, spawnColumns } from '../terrain-gen.js';
 import { Terrain } from '../terrain.js';
 import { xpForLevel, unlockedFamilies, weaponTier, upgradeCost, buyUpgrade, nextMasteryXp, resetProfile, saveProfile } from '../profile.js';
 import { drawTankSprite } from '../tanksprite.js';
+import { cosmeticsOf } from '../cosmetics.js';
 
 const TIPS = [
   'Hold Shift while using the arrow keys for fine aiming.',
@@ -69,7 +70,7 @@ export function menuScreen(app) {
           el('button.btn.btn-big', { text: 'CUSTOM GAME', onclick: () => app.show('lobby') }),
           el('button.btn.btn-big.btn-online', { html: 'PLAY ONLINE <small>beta</small>', onclick: () => app.show('online') }),
           el('button.btn.btn-big', { text: 'ARMORY', onclick: () => app.show('armory') }),
-          el('button.btn.btn-big', { text: 'HOW TO PLAY', onclick: () => app.show('help') }),
+          el('button.btn.btn-big.btn-shop', { html: 'SHOP <small>gears</small>', onclick: () => app.show('shop') }),
           el('button.btn.btn-big', { text: 'SETTINGS', onclick: () => app.show('settings') }),
         ]),
       ]),
@@ -163,7 +164,7 @@ export function lobbyScreen(app) {
       ]);
       row.append(team);
       const tankPrev = el('canvas.pl-tank', { width: 70, height: 40 });
-      drawMiniTank(tankPrev, teamMode ? ['#4cff5e', '#4fc3ff', '#ff4b4b', '#ffd740'][pl.team - 1] : (pl.isProfile ? '#4cff5e' : '#ff4b4b'));
+      drawMiniTank(tankPrev, teamMode ? ['#4cff5e', '#4fc3ff', '#ff4b4b', '#ffd740'][pl.team - 1] : (pl.isProfile ? '#4cff5e' : '#ff4b4b'), 1.1, pl.isProfile ? cosmeticsOf(app.profile) : null);
       row.append(tankPrev);
       row.append(el('div.pl-ready', { html: '&#10004;' }));
       if (!pl.isProfile) row.append(el('button.kick', { text: 'KICK', onclick: () => { L.players.splice(i, 1); render(); } }));
@@ -229,10 +230,10 @@ export function lobbyScreen(app) {
   return s;
 }
 
-export function drawMiniTank(c, color, scale = 1.1) {
+export function drawMiniTank(c, color, scale = 1.1, skin = null) {
   const x = c.getContext('2d');
   x.clearRect(0, 0, c.width, c.height);
-  drawTankSprite(x, { x: c.width / 2, y: c.height - 3, color, angle: 22, scale });
+  drawTankSprite(x, { x: c.width / 2, y: c.height - 3, color, angle: 22, scale, skin });
 }
 
 // ---------------------------------------------------------------- Armory
@@ -323,28 +324,25 @@ function armoryDetail(app, famId, rerender) {
 }
 
 // ---------------------------------------------------------------- Help / Settings
-export function helpScreen(app) {
+// "How to play" lives inside Settings.
+function helpCards() {
   const keys = [
-    ['← →', 'Aim barrel (hold Shift for fine control)'], ['↑ ↓', 'Power'], ['A / D', 'Drive (uses fuel)'],
-    ['Space / Enter', 'Fire (lock in your shot)'], ['Tab / W', 'Weapons list'], ['E', 'Items'], ['Mouse drag', 'Aim from your tank toward the pointer'],
-    ['Mouse wheel', 'Fine power'], ['Esc', 'Close panel / leave game'],
+    ['← →', 'Aim: 1° per tap, hold to speed up (Shift = 5)'], ['↑ ↓', 'Power'], ['A / D', 'Drive (uses fuel)'],
+    ['Space', 'Fire (lock in your shot)'], ['Tab / W', 'Weapons (type to search)'], ['E', 'Items'], ['Mouse drag', 'Aim from your tank toward the pointer'],
+    ['Mouse wheel', 'Power by 1'], ['Enter', 'Chat (online)'], ['Esc', 'Close panel / leave game'],
   ];
-  return el('div.screen.help-screen', {}, [
-    el('div.topbar', {}, [brandEl(app), profileBar(app)]),
-    el('div.help-body', {}, [
-      el('div.card', {}, [el('h3', { text: 'HOW IT WORKS' }), el('ul', {}, [
-        'Everyone aims at the same time. When the timer ends or you press FIRE, every shot launches at once.',
-        'Terrain is fully destructible. Blow holes, dig tunnels, bury opponents, build walls.',
-        'Wind pushes shells sideways. Watch the gauge at the top of the screen each round.',
-        'Deal damage to earn XP and level up. Every level unlocks new weapons for your arsenal.',
-        'Each weapon you use gains mastery from the damage it deals, climbing from Tier I to Tier IV. Gears can buy an upgrade early.',
-        'Supply drops land on the map. Drive into them for extra ammo or repairs.',
-        'Last tank (or team) standing wins. After round 30 everyone takes sudden-death damage.',
-      ].map((t) => el('li', { text: t })))]),
-      el('div.card', {}, [el('h3', { text: 'CONTROLS' }), el('table.keys', {}, keys.map(([k, v]) => el('tr', {}, [el('td', {}, [el('kbd', { text: k })]), el('td', { text: v })])))]),
-    ]),
-    el('div.help-foot', {}, [el('button.btn.btn-primary', { text: 'BACK', onclick: () => app.show('menu') })]),
-  ]);
+  return [
+    el('div.card.help-card', {}, [el('h3', { text: 'HOW IT WORKS' }), el('ul', {}, [
+      'Everyone aims at the same time. When the timer ends or you press FIRE, every shot launches at once.',
+      'Terrain is fully destructible. Blow holes, dig tunnels, bury opponents, build walls.',
+      'Wind pushes shells sideways. Watch the gauge at the top of the screen each round.',
+      'Deal damage to earn XP and gears. Levels unlock weapons; gears buy upgrades and cosmetics.',
+      'Each weapon gains mastery from the damage it deals, climbing from Tier I to Tier IV.',
+      'Air-support weapons fire a flare; the strike lands where the flare comes to rest.',
+      'Last tank (or team) standing wins. After round 30 everyone takes sudden-death damage.',
+    ].map((t) => el('li', { text: t })))]),
+    el('div.card.help-card', {}, [el('h3', { text: 'CONTROLS' }), el('table.keys', {}, keys.map(([k, v]) => el('tr', {}, [el('td', {}, [el('kbd', { text: k })]), el('td', { text: v })])))]),
+  ];
 }
 
 export function settingsScreen(app) {
@@ -370,7 +368,7 @@ export function settingsScreen(app) {
   return el('div.screen.settings-screen', {}, [
     el('div.topbar', {}, [brandEl(app), profileBar(app)]),
     el('div.settings-body', {}, [
-      el('div.card', {}, [
+      el('div.settings-col', {}, [el('div.card', {}, [
         el('h3', { text: 'SETTINGS' }),
         el('label.srow', {}, [el('span', { text: 'Commander name' }), name]),
         el('label.srow', {}, [el('span', { text: 'Sound effects' }), sound]),
@@ -382,7 +380,8 @@ export function settingsScreen(app) {
         el('div.srow', {}, [el('span', { text: 'Intro' }), el('button.btn.btn-small', { text: 'REPLAY INTRO', onclick: () => { save(); app.startIntro(); } })]),
         el('p.muted', { text: 'Progress is stored in this browser (localStorage).' }),
       ]),
-      el('button.btn.btn-primary', { text: 'BACK', onclick: () => { save(); app.show('menu'); } }),
+      el('button.btn.btn-primary', { text: 'BACK', onclick: () => { save(); app.show('menu'); } })]),
+      el('div.settings-col.help-col', {}, helpCards()),
     ]),
   ]);
 }
@@ -408,7 +407,7 @@ export function resultsScreen(app, results, summary) {
     }
     if (summary.unlocks.length) {
       sumBox.append(el('small', { text: 'NEW WEAPONS UNLOCKED' }));
-      sumBox.append(el('div.unlock-row', {}, summary.unlocks.map((id) => { const f = FAMILY_BY_ID[id]; return el('div.unlock', { title: f.desc }, [el('img', { src: iconURL(f.icon, f.color, 40), alt: '' }), el('span', { text: f.name })]); })));
+      sumBox.append(el('div.unlock-row', {}, summary.unlocks.filter((id) => FAMILY_BY_ID[id]).map((id) => { const f = FAMILY_BY_ID[id]; return el('div.unlock', { title: f.desc }, [el('img', { src: iconURL(f.icon, f.color, 40), alt: '' }), el('span', { text: f.name })]); })));
     }
     if (summary.masteryUps.length) {
       sumBox.append(el('small', { text: 'WEAPON MASTERY' }));

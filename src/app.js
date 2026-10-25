@@ -12,6 +12,10 @@ import { onlineScreen, onlineLobbyScreen } from './ui/online.js';
 import { DevTools } from './ui/devtools.js';
 import { ONLINE_SERVER, DEFAULT_SETTINGS } from './config.js';
 import { MusicPlayer } from './music.js';
+import { shopScreen } from './ui/shop.js';
+import { rewardsScreen } from './ui/rewards.js';
+import { OnlineSession } from './online.js';
+import { cosmeticsOf } from './cosmetics.js';
 import { Intro } from './intro.js';
 
 // Audio sink for the background attract-mode battle (it must stay silent).
@@ -89,11 +93,48 @@ export class App {
   // First click on the boot screen: unlock audio, start music, play the intro (or go straight to the menu).
   beginSession() {
     this.audio.init();
-    this.music.play();
-    this.renderer.fade = 1;
-    this.renderer.fadeTo(0, this.profile.settings.intro !== false ? 1.2 : 1.8);
-    if (this.profile.settings.intro !== false) this.startIntro();
-    else { this.startAttract(); this.show('menu'); }
+    const go = () => {
+      this.music.play();
+      this.renderer.fade = 1;
+      this.renderer.fadeTo(0, this.profile.settings.intro !== false ? 1.2 : 1.8);
+      if (this.profile.settings.intro !== false) this.startIntro();
+      else { this.startAttract(); this.show('menu'); }
+    };
+    if (!this.profile.settings.named) this.askName(go); else go();
+  }
+
+  // First run: pick a commander name.
+  askName(done) {
+    const p = this.profile;
+    const input = el('input', { type: 'text', maxlength: 14, placeholder: 'Your callsign', value: p.name && p.name !== 'Commander' ? p.name : '', autocomplete: 'off', spellcheck: false });
+    const err = el('div.gate-error');
+    const submit = () => {
+      const v = input.value.trim();
+      if (v.length < 2) { err.textContent = 'At least two characters, Commander.'; input.focus(); return; }
+      p.name = v.slice(0, 14); p.settings.named = true; saveProfile(p);
+      this.closeModal(); done();
+    };
+    input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') submit(); });
+    this.modal.innerHTML = '';
+    this.modal.classList.remove('hidden');
+    this.modal.append(el('div.modal-box.name-modal', {}, [
+      el('h2', { text: 'WELCOME, COMMANDER' }),
+      el('p', { text: 'Choose the name other players will see. You can change it later in Settings.' }),
+      input, err,
+      el('button.btn.btn-primary.btn-big', { text: 'CONTINUE', onclick: submit }),
+    ]));
+    setTimeout(() => input.focus(), 50);
+  }
+
+  // Generic choice dialog.
+  choice(title, text, options) {
+    this.modal.innerHTML = '';
+    this.modal.classList.remove('hidden');
+    this.modal.append(el('div.modal-box.choice', {}, [
+      el('h2', { text: title }), text ? el('p', { text }) : null,
+      el('div.modal-buttons.choice-buttons', {}, options.map((o) => el('button', { class: `btn btn-big ${o.cls || ''}`, html: o.html, onclick: () => { this.closeModal(); o.fn(); } }))),
+      el('button.btn.btn-small', { text: 'CANCEL', onclick: () => this.closeModal() }),
+    ]));
   }
 
   startIntro() {
@@ -119,12 +160,12 @@ export class App {
       seed: rng.int(1, 1e9), audio: SILENT_AUDIO,
     });
     g.dev = {};
-    // Fade to black, hold, then a fresh battle fades in.
-    g.on.gameOver = () => { this.renderer.fadeTo(1, 1.0); setTimeout(() => { if (this.attract === g) this.startAttract(); }, 2100); };
+    // Fade to black, hold, then a fresh battle fades in once its tanks have landed.
+    g.on.gameOver = () => { this.renderer.fadeTo(1, 1.6); setTimeout(() => { if (this.attract === g) this.startAttract(); }, 2300); };
     this.attract = g;
     this.attractAcc = 0;
-    this.renderer.fade = Math.max(this.renderer.fade, 0.999);
-    this.renderer.fadeTo(0, 1.8);
+    this.renderer.fade = 1; this.renderer.fadeTarget = 1;
+    this.attractFadeWait = true;
   }
 
   // ------------------------------------------------------------ screens
@@ -138,8 +179,9 @@ export class App {
       case 'menu': node = S.menuScreen(this); break;
       case 'lobby': node = S.lobbyScreen(this); break;
       case 'armory': node = S.armoryScreen(this); break;
-      case 'help': node = S.helpScreen(this); break;
-      case 'settings': node = S.settingsScreen(this); break;
+      case 'help': case 'settings': node = S.settingsScreen(this); break;
+      case 'shop': node = shopScreen(this); break;
+      case 'rewards': node = rewardsScreen(this, args[0], args[1], () => this.show('results', args[0], args[1])); break;
       case 'results': node = S.resultsScreen(this, ...args); break;
       case 'boot': case 'title': node = S.bootScreen(this); break;
       case 'online': node = onlineScreen(this); break;
@@ -147,7 +189,7 @@ export class App {
       case null: break;
     }
     if (node) this.screens.append(node);
-    if (name && name !== 'results' && this.game) { this.game = null; if (this.session) this.session.game = null; this.hud.hide(); this.removeSpectate(); this.closeChat(); }
+    if (name && name !== 'results' && name !== 'rewards' && this.game) { this.game = null; if (this.session) this.session.game = null; this.hud.hide(); this.removeSpectate(); this.closeChat(); }
     if (name && name !== 'onlineLobby' && name !== 'results' && this.session && !this.game) {
       // Leaving the online flow entirely drops the room connection.
       if (!['online', 'onlineLobby'].includes(name) && this.session.phase !== 'game') { this.session.leave(); this.session = null; }
@@ -156,7 +198,7 @@ export class App {
     if (name && name !== 'boot' && name !== 'title') {
       if (this.intro) this.intro = null;
       if (!this.game && !this.attract) this.startAttract();
-      if (!this.game) this.music.duck(false);
+      if (!this.game || name === 'results' || name === 'rewards') this.music.duck(false);
     }
     this.dev.onScreen(name);
   }
@@ -178,6 +220,30 @@ export class App {
 
   // ------------------------------------------------------------ game lifecycle
   quickPlay() {
+    this.choice('QUICK PLAY', 'Jump straight into a battle.', [
+      { html: 'ONLINE<small>find or open a public room</small>', cls: 'btn-primary', fn: () => this.quickOnline() },
+      { html: 'VS BOTS<small>offline against five bots</small>', fn: () => this.quickBots() },
+    ]);
+  }
+
+  // Join the first open public room, or create one.
+  async quickOnline() {
+    const server = this.serverUrl();
+    if (!server) { this.show('online'); return; }
+    this.toast('Finding a room…', '#4fc3ff');
+    const session = new OnlineSession(this, server);
+    try {
+      const rooms = await session.listRooms();
+      const open = rooms.find((r) => r.phase === 'lobby' && r.players < r.max);
+      const code = open ? open.code : await session.createRoom();
+      await session.connect(code);
+      this.session = session;
+      this.show('onlineLobby');
+      this.toast(open ? `Joined ${open.hostName || 'a'}'s room` : 'No open rooms, so you are hosting a new public one');
+    } catch (e) { this.toast(e.message, '#ff5252'); this.show('online'); }
+  }
+
+  quickBots() {
     const rng = new RNG(Date.now());
     const names = rng.shuffle(BOT_NAMES);
     const p = this.profile;
@@ -207,7 +273,7 @@ export class App {
   startGame(config) {
     this.lastGameConfig = config;
     const ids = unlockedIds(this.profile), tiers = allTiers(this.profile);
-    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers, level: this.profile.level });
+    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers, level: this.profile.level, cosmetics: p.isProfile ? cosmeticsOf(this.profile) : null });
     this.show(null);
     this.audio.init();
     this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio, online: config.online || null, deadline: config.deadline || null });
@@ -216,8 +282,8 @@ export class App {
     this.acc = 0;
     this.attract = null;
     this.music.duck(true);
-    this.renderer.fade = Math.max(this.renderer.fade, 0.85);
-    this.renderer.fadeTo(0, 0.9);
+    this.renderer.fade = 1; this.renderer.fadeTarget = 1;
+    this.gameFadeWait = true; // stay black until the tanks have dropped in
     if (config.online) {
       const onClose = () => { if (this.game === g) { this.hud.hide(); this.removeSpectate(); this.closeChat(); this.game = null; this.session = null; this.modal.innerHTML = ''; this.modal.classList.remove('hidden'); this.modal.append(S.confirmModal('Connection to the room was lost.', () => { this.closeModal(); this.show('menu'); }, () => { this.closeModal(); this.show('menu'); })); } };
       config.online.on('close', onClose);
@@ -270,21 +336,22 @@ export class App {
 
   endGame(results) {
     const g = this.game;
-    if (!g) return;
+    if (!g || g.ended) return; // a game pays out once, even if its over-timer is re-armed
+    g.ended = true;
     const me = results.find((r) => r.tank.isProfile);
     let summary = null;
     if (me) {
       summary = applyGameResults(this.profile, {
         xp: me.xp, kills: me.kills, damage: me.damage, shots: me.tank.stats.shots, won: !!me.winner, mastery: me.tank.mastery || {},
       });
-      if (summary.levelUps.length) this.audio.play('levelup');
     }
     this.hud.hide();
     this.removeSpectate();
     this.closeChat();
     this.timeScale = 1;
     this.renderer.banner = null;
-    this.show('results', results, summary);
+    if (summary && (summary.xp > 0 || summary.gears > 0)) this.show('rewards', results, summary);
+    else this.show('results', results, summary);
   }
 
   confirmLeave() {
@@ -411,6 +478,7 @@ export class App {
       let steps = 0;
       while (this.acc >= STEP && steps < 8) { g.update(STEP); this.acc -= STEP; steps++; }
       if (steps >= 8) this.acc = 0;
+      if (this.gameFadeWait && (g.phase !== 'intro' || g.introT < 0.3)) { this.gameFadeWait = false; this.renderer.fadeTo(0, 1.2); }
       this.renderer.drawGame(g, this.time, dt);
       this.hud.update(g);
       this.dev.update(g, dt);
@@ -423,6 +491,7 @@ export class App {
       let steps = 0;
       while (this.attractAcc >= STEP && steps < 4) { this.attract.update(STEP); this.attractAcc -= STEP; steps++; }
       if (steps >= 4) this.attractAcc = 0;
+      if (this.attractFadeWait && (this.attract.phase !== 'intro' || this.attract.introT < 0.4)) { this.attractFadeWait = false; this.renderer.fadeTo(0, 2.2); }
       this.renderer.drawGame(this.attract, this.time, dt, { attract: true, music: this.music });
     } else {
       this.renderer.drawMenu(this.time, dt, { music: this.music });

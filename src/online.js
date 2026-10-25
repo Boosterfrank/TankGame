@@ -1,6 +1,7 @@
 // Online session: talks to the Cloudflare Worker relay (worker/) and bridges it to the Game.
 // The relay only collects locked-in shots; every client simulates volleys itself from the shared seed.
 import { unlockedIds, allTiers } from './profile.js';
+import { cosmeticsOf } from './cosmetics.js';
 
 export class OnlineSession {
   constructor(app, serverUrl) {
@@ -47,7 +48,7 @@ export class OnlineSession {
       this.ws = ws; this.code = code.toUpperCase();
       const timeout = setTimeout(() => { if (!this.joined) { reject(new Error('Connection timed out')); try { ws.close(); } catch { /* ignore */ } } }, 9000);
       ws.onopen = () => {
-        this.send({ type: 'join', name: p.name, level: p.level, unlockedIds: unlockedIds(p), tiers: allTiers(p) });
+        this.send({ type: 'join', name: p.name, level: p.level, unlockedIds: unlockedIds(p), tiers: allTiers(p), cosmetics: cosmeticsOf(p) });
         this.pingTimer = setInterval(() => { if (ws.readyState === 1) { this.pingAt = performance.now(); ws.send('ping'); } }, 20000);
       };
       ws.onmessage = (e) => {
@@ -96,7 +97,7 @@ export class OnlineSession {
     this.phase = 'game';
     const players = m.players.map((p) => ({
       name: p.name, isBot: !!p.bot, team: p.team, level: p.level, netId: p.id,
-      isProfile: p.id === this.myId, unlockedIds: p.unlockedIds || ['shot'], tiers: p.tiers || {},
+      isProfile: p.id === this.myId, unlockedIds: p.unlockedIds || ['shot'], tiers: p.tiers || {}, cosmetics: p.cosmetics || null,
     }));
     this.app.startGame({ settings: m.settings, players, seed: m.seed, online: this, deadline: m.deadline });
   }

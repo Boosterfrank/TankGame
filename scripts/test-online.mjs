@@ -22,7 +22,7 @@ async function makeClient(name) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name} console: ${m.text()}`); });
   await page.goto('http://localhost:8080/', { waitUntil: 'load' });
   await page.evaluate(({ name, relay }) => {
-    const p = { name, level: 12, xp: 0, gears: 0, weaponXp: {}, weaponTier: {}, stats: {}, settings: { sound: false, volume: 0, server: relay, intro: false, music: false } };
+    const p = { name, level: 12, xp: 0, gears: 0, weaponXp: {}, weaponTier: {}, stats: {}, settings: { sound: false, volume: 0, server: relay, intro: false, music: false, named: true }, cosmetics: { owned: ['pattern:stripes', 'accessory:crown'], equipped: { pattern: 'stripes', accessory: 'crown', trail: 'none', title: 'none' } } };
     localStorage.setItem('utg.profile.v1', JSON.stringify(p));
   }, { name, relay });
   await page.reload({ waitUntil: 'load' });
@@ -61,6 +61,8 @@ await guest.waitForFunction(() => window.__app.game && window.__app.game.phase =
 const seeds = await Promise.all([host, guest].map((p) => p.evaluate(() => ({ seed: window.__app.game.seed, tanks: window.__app.game.tanks.map((t) => [t.name, t.isBot, Math.round(t.x), t.netId]) }))));
 check(seeds[0].seed === seeds[1].seed, 'same seed');
 check(JSON.stringify(seeds[0].tanks) === JSON.stringify(seeds[1].tanks), 'same tank setup');
+const cos = await guest.evaluate(() => window.__app.game.tanks.map((t) => t.cosmetics && t.cosmetics.pattern));
+check(cos[0] === 'stripes' && cos[1] === 'stripes', `cosmetics travel with players (${JSON.stringify(cos)})`);
 // dev-op replication + crate pickup: the guest spawns a weapon crate on itself, picks it up at once,
 // and the host replays both the spawn and the pickup at the volley.
 await guest.evaluate(() => { const g = window.__app.game; g.devOp({ type: 'crate', x: Math.round(g.me.x), kind: 'weapon' }); });
@@ -80,14 +82,16 @@ await guest.waitForFunction(() => window.__app.game.phase === 'aim' && window.__
 const state = await Promise.all([host, guest].map((p) => p.evaluate(() => {
   const g = window.__app.game;
   let solid = 0; const m = g.terrain.mask; for (let i = 0; i < m.length; i += 7) solid += m[i];
-  return { wind: g.wind, solid, crates: g.crates.length, crateSeq: g.crateSeq, tanks: g.tanks.map((t) => [t.name, Math.round(t.hp), Math.round(t.armor), Math.round(t.x), Math.round(t.y), t.alive]), msgs: g.messages.map((x) => x.text) };
+  return { wind: g.wind, solid, crates: g.crates.length, crateIds: g.crates.map((c) => c.id), crateSeq: g.crateSeq, tanks: g.tanks.map((t) => [t.name, Math.round(t.hp), Math.round(t.armor), Math.round(t.x), Math.round(t.y), t.alive]), msgs: g.messages.map((x) => x.text) };
 })));
 console.log('host :', JSON.stringify(state[0].tanks), 'solid', state[0].solid, 'wind', state[0].wind);
 console.log('guest:', JSON.stringify(state[1].tanks), 'solid', state[1].solid, 'wind', state[1].wind);
 check(state[0].wind === state[1].wind, 'same wind after round');
 check(JSON.stringify(state[0].tanks) === JSON.stringify(state[1].tanks), 'identical tank state after volley (lockstep)');
 check(state[0].solid === state[1].solid, 'identical terrain after volley');
-check(state[0].crateSeq === 1 && state[1].crateSeq === 1 && state[0].crates === 0 && state[1].crates === 0, `dev crate replicated and claimed on both (${state[0].crateSeq}/${state[1].crateSeq}, ${state[0].crates}/${state[1].crates})`);
+// crate #1 is the dev crate: it must have been spawned (crateSeq >= 1) and claimed (not lying around) on both sides,
+// and any natural crate drops since must match exactly.
+check(state[0].crateSeq === state[1].crateSeq && state[0].crateSeq >= 1 && !state[0].crateIds.includes(1) && !state[1].crateIds.includes(1) && JSON.stringify(state[0].crateIds) === JSON.stringify(state[1].crateIds), `dev crate replicated and claimed on both (seq ${state[0].crateSeq}/${state[1].crateSeq}, crates ${JSON.stringify(state[0].crateIds)}/${JSON.stringify(state[1].crateIds)})`);
 check(state[0].msgs.length > 0, 'host saw messages');
 // in-game chat
 await guest.keyboard.press('Enter');

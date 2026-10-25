@@ -134,7 +134,7 @@ export function onlineLobbyScreen(app) {
         el('button.mini', { text: '▶', disabled: !canTeam, onclick: () => session.setTeam((pl.team % 4) + 1) }),
       ]));
       const tankPrev = el('canvas.pl-tank', { width: 70, height: 40 });
-      drawMiniTank(tankPrev, teamMode ? ['#4cff5e', '#4fc3ff', '#ff4b4b', '#ffd740'][pl.team - 1] : (me ? '#4cff5e' : '#ff4b4b'));
+      drawMiniTank(tankPrev, teamMode ? ['#4cff5e', '#4fc3ff', '#ff4b4b', '#ffd740'][pl.team - 1] : (me ? '#4cff5e' : '#ff4b4b'), 1.1, pl.cosmetics);
       row.append(tankPrev);
       const ready = pl.bot || pl.ready;
       const readyEl = el('button.pl-ready', { class: `pl-ready${ready ? '' : ' not'}`, html: ready ? '&#10004;' : 'Ready?', disabled: !me, title: me ? 'Toggle ready' : '' });

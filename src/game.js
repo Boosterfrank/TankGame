@@ -10,6 +10,7 @@ import { FX } from './fx.js';
 import { getWeapon, FAMILIES, FAMILY_BY_ID } from './weapons.js';
 import { ITEMS } from './items.js';
 import { planBotShot, planBotItems, botArsenal } from './ai.js';
+import { TRAIL_STYLES, cleanCosmetics } from './cosmetics.js';
 
 const WIND_MAX = { none: 0, low: 3, medium: 6, high: 9, crazy: 12 };
 const SUDDEN_DEATH_ROUND = 30;
@@ -63,6 +64,13 @@ export class Game {
     players.forEach((def, i) => {
       const t = new Tank({ ...def, hp: this.settings.hp, team: this.settings.mode === 'team' ? def.team : 100 + i });
       t.netId = def.netId || null;
+      t.cosmetics = def.cosmetics ? cleanCosmetics(def.cosmetics) : null;
+      if (t.isBot) { // bots dress up sometimes (seeded, so online clients agree)
+        const c = cleanCosmetics(null);
+        if (this.rng.chance(0.35)) c.pattern = this.rng.pick(['stripes', 'camo', 'hex', 'chevron', 'checker', 'carbon', 'bolt']);
+        if (this.rng.chance(0.25)) c.accessory = this.rng.pick(['antenna', 'mohawk', 'spikes', 'horns', 'tophat', 'propeller']);
+        if (c.pattern !== 'none' || c.accessory !== 'none') t.cosmetics = c;
+      }
       t.x = cols[i];
       t.y = this.terrain.surfaceY(t.x, 0) - 190; // tanks drop in during the intro
       t.onGround = false;
@@ -520,7 +528,9 @@ export class Game {
       let speedMul = 1;
       if (f.speedSteps) speedMul *= 1 - f.speedSteps * (n > 1 ? i / (n - 1) : 0);
       if (f.speedVar) speedMul *= 1 + (this.rng.next() - 0.5) * 2 * f.speedVar;
-      const spec = f.colors ? { ...w.spec, color: f.colors[i % f.colors.length] } : w.spec;
+      let spec = f.colors ? { ...w.spec, color: f.colors[i % f.colors.length] } : w.spec;
+      const trailStyle = tank.cosmetics && TRAIL_STYLES[tank.cosmetics.trail];
+      if (trailStyle && !f.colors && (spec.trail || 'dot') === 'dot') spec = { ...spec, ...trailStyle };
       const make = () => {
         if (!tank.alive) return;
         const tip = tank.barrelTip();

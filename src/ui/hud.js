@@ -175,7 +175,8 @@ export class HUD {
   renderWeapons(game, t) {
     this.overlayTank = t;
     const q = (this.query || '').toLowerCase();
-    const ids = [...t.arsenal.keys()].filter((id) => !q || FAMILY_BY_ID[id].name.toLowerCase().includes(q)).sort((a, b) => FAMILY_BY_ID[a].name.localeCompare(FAMILY_BY_ID[b].name));
+    // Weapons with no ammo left drop out of the grid (crates and ammo items bring them back).
+    const ids = [...t.arsenal.keys()].filter((id) => t.ammo(id) > 0).filter((id) => !q || FAMILY_BY_ID[id].name.toLowerCase().includes(q)).sort((a, b) => FAMILY_BY_ID[a].name.localeCompare(FAMILY_BY_ID[b].name));
     const perPage = 63;
     const pages = Math.max(1, Math.ceil(ids.length / perPage));
     this.page = Math.min(this.page, pages - 1);
@@ -209,8 +210,8 @@ export class HUD {
       if (e.key === 'Escape') { if (search.value) { this.query = ''; this.renderWeapons(game, t); this.overlay.querySelector('.wsearch')?.focus(); } else this.closeOverlay(); }
       if (e.key === 'Enter') { const first = slice.find((id) => t.ammo(id) > 0); if (first) { game.selectWeapon(first); this.closeOverlay(); } }
     });
-    const head = el('div.ov-head', {}, [el('span', { text: `WEAPONS` }), search, el('small', { text: `${ids.filter((i) => t.ammo(i) > 0).length} ready of ${t.arsenal.size} in your loadout · supply drops add more · page ${this.page + 1}/${pages}` })]);
-    if (!slice.length) grid.append(el('div.muted.room-empty', { text: q ? `No weapons match "${this.query}"` : 'No weapons' }));
+    const head = el('div.ov-head', {}, [el('span', { text: `WEAPONS` }), search, el('small', { text: `${ids.length} weapons with ammo · supply drops add more · page ${this.page + 1}/${pages}` })]);
+    if (!slice.length) grid.append(el('div.muted.room-empty', { text: q ? `No weapons with ammo match "${this.query}"` : 'Out of ammo for everything but Shot' }));
     this.overlay.append(head, prev, grid, next);
   }
 

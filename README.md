@@ -107,7 +107,7 @@ next volley.
 | Mouse drag on the battlefield | Aim from your tank toward the pointer |
 | `Space` | Fire (lock in your shot) |
 | `Enter` / `T` / `/` | Chat (online games) |
-| `Tab` / `W` | Weapons grid (start typing to search, Enter picks the first match) |
+| `Tab` / `W` | Weapons grid: only weapons with ammo are listed (start typing to search, Enter picks the first match) |
 | `E` | Items |
 | `Esc` | Close panel / leave game |
 

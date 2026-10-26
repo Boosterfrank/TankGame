@@ -21,10 +21,11 @@ async function makeClient(name) {
   page.on('pageerror', (e) => errors.push(`${name} pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name} console: ${m.text()}`); });
   await page.goto('http://localhost:8080/', { waitUntil: 'load' });
-  await page.evaluate(({ name, relay }) => {
+  await page.evaluate(({ name, relay, devKey }) => {
     const p = { name, level: 12, xp: 0, gears: 0, weaponXp: {}, weaponTier: {}, stats: {}, settings: { sound: false, volume: 0, server: relay, intro: false, music: false, named: true }, cosmetics: { owned: ['pattern:stripes', 'accessory:crown'], equipped: { pattern: 'stripes', accessory: 'crown', trail: 'none', title: 'none' } } };
     localStorage.setItem('utg.profile.v1', JSON.stringify(p));
-  }, { name, relay });
+    if (name === 'Host' && devKey) { localStorage.setItem('utg.dev', '1'); localStorage.setItem('utg.devkey', devKey); }
+  }, { name, relay, devKey: process.env.DEV_KEY || '' });
   await page.reload({ waitUntil: 'load' });
   await page.click('.start-btn');
   await page.waitForSelector('.menu-screen', { timeout: 10000 });
@@ -44,6 +45,18 @@ await guest.fill('.code-input', code);
 await guest.click('.online-right button:has-text("JOIN")');
 await guest.waitForSelector('.online-lobby', { timeout: 10000 });
 await host.waitForFunction(() => window.__app.session?.lobby?.players.length === 2);
+if (process.env.DEV_KEY) { // developer powers: the host is a verified developer and grants the guest levels and gears
+  await host.waitForFunction(() => window.__app.session.isDev && document.querySelectorAll('.pl-dev').length === 2, null, { timeout: 8000 });
+  check(await host.evaluate(() => !!document.querySelector('.player-row.me .dev-chip')), 'developer chip on the host row');
+  const guestRow = host.locator('.player-row:not(.me)').first();
+  await guestRow.locator('.pl-dev button[title="+5 levels"]').click();
+  await guestRow.locator('.pl-dev button[title="+100 gears"]').click();
+  await guest.waitForFunction(() => window.__app.profile.level === 17 && window.__app.profile.gears === 100, null, { timeout: 8000 });
+  await host.waitForFunction(() => window.__app.session.lobby.players.find((p) => p.id !== window.__app.session.myId)?.level === 17, null, { timeout: 8000 });
+  const saved = await guest.evaluate(() => JSON.parse(localStorage.getItem('utg.profile.v1')).level);
+  check(saved === 17, `grant persisted in the guest profile (level ${saved})`);
+  if (shots) await host.screenshot({ path: `${outDir}/31b-online-lobby-dev.png` });
+} else console.log('DEV_KEY not set: skipping developer lobby checks');
 await host.click('text=+ ADD BOT');
 await host.waitForFunction(() => window.__app.session?.lobby?.players.length === 3);
 await host.click('.srow.clickable:has-text("Turn Time")'); // 30 -> 45
@@ -116,7 +129,7 @@ const left = await host.evaluate(() => window.__app.game.tanks.filter((t) => t.c
 check(left.length === 1 && left[0][1] === false, `left player destroyed: ${JSON.stringify(left)}`);
 // dev tools gate on the guest (now on menu)
 await guest.waitForSelector('.menu-screen');
-for (let i = 0; i < 5; i++) await guest.click('.profile-bar .avatar');
+for (let i = 0; i < 5; i++) await guest.click('.profile-bar .avatar', { force: true, noWaitAfter: true }); // quick taps, no per-click stability waits
 await guest.waitForSelector('.modal-box.gate');
 await guest.fill('.modal-box.gate input', 'wrong');
 await guest.press('.modal-box.gate input', 'Enter');

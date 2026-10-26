@@ -156,6 +156,15 @@ export function lobbyScreen(app) {
           el('button.mini', { text: '+', onclick: () => { pl.level = Math.min(60, (pl.level || 1) + 5); render(); } }),
         ]);
         row.append(lvl);
+      } else if (app.dev.unlocked) { // developers: set a human's level too (the profile's level for you)
+        const cur = pl.isProfile ? app.profile.level : (pl.level || app.profile.level);
+        const lvlIn = el('input.dev-num', { type: 'number', value: cur, min: 1, max: 99, title: 'Developer: level for this player' });
+        lvlIn.addEventListener('change', () => {
+          const v = Math.max(1, Math.min(99, Math.round(+lvlIn.value || 1)));
+          if (pl.isProfile) { app.profile.level = v; app.profile.xp = 0; saveProfile(app.profile); } else pl.level = v;
+          render();
+        });
+        row.append(el('div.pl-botlvl.dev', {}, [el('span', { text: 'Lvl' }), lvlIn]));
       } else row.append(el('div.pl-botlvl.ghost', { text: pl.isProfile ? `${app.profile.gears} gears` : 'Guest' }));
       const team = el('div.pl-team', { class: `pl-team${teamMode ? '' : ' off'}` }, [
         el('small', { text: 'TEAM' }),

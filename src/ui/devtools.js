@@ -10,13 +10,15 @@ import { DEFAULT_SETTINGS, BOT_NAMES, WORLD_W, PHYS } from '../config.js';
 
 const GATE_HASH = 'd1058ab19b2ff61646e7f6f08aecef7337b7da90c6d3f8e18a93d2b35f62735d';
 const KEY = 'utg.dev';
+const KEY_SECRET = 'utg.devkey'; // the password itself, kept so the relay can verify developer actions
 
 export class DevTools {
   constructor(app) {
     this.app = app;
     this.flags = { god: false, infAmmo: false, infFuel: false, noTimer: false, debug: false, revealAims: false, hitboxes: false, timeScale: 1 };
     this.unlocked = false;
-    try { this.unlocked = localStorage.getItem(KEY) === '1'; } catch { /* ignore */ }
+    this.key = '';
+    try { this.unlocked = localStorage.getItem(KEY) === '1'; this.key = localStorage.getItem(KEY_SECRET) || ''; } catch { /* ignore */ }
     this.panel = document.getElementById('devpanel');
     this.open = false;
     this.clicks = [];
@@ -29,7 +31,7 @@ export class DevTools {
   // Five quick clicks on the profile avatar open the gate.
   secretClick() {
     const now = performance.now();
-    this.clicks = this.clicks.filter((t) => now - t < 2500);
+    this.clicks = this.clicks.filter((t) => now - t < 3500);
     this.clicks.push(now);
     if (this.clicks.length >= 5) {
       this.clicks = [];
@@ -42,7 +44,7 @@ export class DevTools {
     const input = el('input', { type: 'password', placeholder: 'Password', autocomplete: 'off' });
     const err = el('div.gate-error');
     const tryIt = () => {
-      if (sha256(input.value) === GATE_HASH) { app.closeModal(); this.unlock(); }
+      if (sha256(input.value) === GATE_HASH) { const key = input.value; app.closeModal(); this.unlock(key); }
       else { err.textContent = 'Access denied.'; input.value = ''; input.focus(); this.panelShake(err); }
     };
     input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') tryIt(); if (e.key === 'Escape') app.closeModal(); });
@@ -59,9 +61,11 @@ export class DevTools {
 
   panelShake(node) { node.classList.remove('shake'); void node.offsetWidth; node.classList.add('shake'); }
 
-  unlock() {
+  unlock(key) {
     this.unlocked = true;
-    try { localStorage.setItem(KEY, '1'); } catch { /* ignore */ }
+    if (key) this.key = key;
+    try { localStorage.setItem(KEY, '1'); if (key) localStorage.setItem(KEY_SECRET, key); } catch { /* ignore */ }
+    this.app.session?.authDev();
     this.app.audio.play('levelup');
     this.app.toast('Developer tools unlocked', '#ea80fc');
     if (this.app.screenName) this.app.show(this.app.screenName);
@@ -69,8 +73,8 @@ export class DevTools {
   }
 
   lock() {
-    this.unlocked = false; this.open = false;
-    try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+    this.unlocked = false; this.open = false; this.key = '';
+    try { localStorage.removeItem(KEY); localStorage.removeItem(KEY_SECRET); } catch { /* ignore */ }
     Object.assign(this.flags, { god: false, infAmmo: false, infFuel: false, noTimer: false, debug: false, revealAims: false, hitboxes: false, timeScale: 1 });
     this.panel.classList.add('hidden');
     this.panel.innerHTML = '';
@@ -180,6 +184,21 @@ export class DevTools {
       gameControls.push(el('div.dev-row', {}, [btn('WEAPON TEST RANGE', () => this.testRange()), btn('BOT BATTLE (SPECTATE)', () => this.botBattle())]));
     }
     panel.append(section('GAME', gameControls));
+    const session = app.session;
+    if (session && !g && session.lobby) {
+      const players = session.lobby.players;
+      const humans = players.filter((x) => !x.bot);
+      panel.append(section('ROOM', session.isDev ? [
+        el('div.muted', { text: 'Verified by the relay: you have host powers here, and each player row has level / gears / XP controls.' }),
+        el('div.dev-row', {}, [
+          btn('FORCE START', () => session.start()),
+          btn('+5 LEVELS ALL', () => { for (const x of humans) session.grant(x.id, { levels: 5 }); }),
+          btn('+500 GEARS ALL', () => { for (const x of humans) session.grant(x.id, { gears: 500 }); }),
+          btn('BOTS LVL 60', () => { for (const x of players) if (x.bot) session.grant(x.id, { level: 60 }); }),
+          btn('BOTS LVL 1', () => { for (const x of players) if (x.bot) session.grant(x.id, { level: 1 }); }),
+        ]),
+      ] : [el('div.muted', { text: this.key ? 'Waiting for the relay to verify developer access…' : 'Re-enter the developer password (lock, then unlock) to use developer powers online.' }), this.key ? btn('RETRY', () => session.authDev()) : null]));
+    }
     panel.append(section('LOG', [el('pre.dev-log', { text: this.log.join('\n') || '—' })]));
     this.refreshStats(g);
   }

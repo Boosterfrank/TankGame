@@ -273,7 +273,7 @@ export class App {
   startGame(config) {
     this.lastGameConfig = config;
     const ids = unlockedIds(this.profile), tiers = allTiers(this.profile);
-    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers, level: this.profile.level, cosmetics: p.isProfile ? cosmeticsOf(this.profile) : null });
+    const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers, level: p.isProfile ? this.profile.level : (p.level || this.profile.level), cosmetics: p.isProfile ? cosmeticsOf(this.profile) : null });
     this.show(null);
     this.audio.init();
     this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio, online: config.online || null, deadline: config.deadline || null });
@@ -376,6 +376,7 @@ export class App {
       if (this.intro) { this.intro.input(); return; }
       const g = this.game;
       this.input.keys.add(e.code);
+      if (e.code === 'Backquote' && this.dev.unlocked) { this.dev.toggle(); return; }
       if (!g) return;
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'].includes(e.code)) e.preventDefault();
       if (!e.repeat && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.code)) { this.aimKey(e.code, 1, e.shiftKey); this.input.holds.set(e.code, { t: 0, acc: 0 }); }

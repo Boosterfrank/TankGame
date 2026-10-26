@@ -112,6 +112,8 @@ export function onlineLobbyScreen(app) {
     if (draftEl) chatDraft = draftEl.value;
     s.innerHTML = '';
     const isHost = session.isHost;
+    const admin = isHost || session.isDev; // relay-verified developers get host powers
+    const dev = session.isDev;
     const teamMode = L.settings.mode === 'team';
     const list = el('div.player-list');
     L.players.forEach((pl, i) => {
@@ -120,8 +122,19 @@ export function onlineLobbyScreen(app) {
       row.append(el('div.pl-level', {}, [el('small', { text: pl.bot ? 'BOT' : pl.id === L.hostId ? 'HOST' : 'LVL' }), el('b', { text: pl.level })]));
       row.append(el('div.pl-avatar', { text: pl.name.slice(0, 2).toUpperCase() }));
       const title = titleName(pl.cosmetics?.title);
-      row.append(el('div.pl-name', {}, [el('div.pl-namewrap', {}, [title ? el('i.pl-title', { text: title }) : null, el('b', { text: pl.name })]), el('small', { text: me ? 'You' : pl.id === L.hostId ? 'Host' : pl.connected === false ? 'Disconnected' : '' })]));
-      if (pl.bot && isHost) {
+      const nameCell = el('div.pl-name', {}, [el('div.pl-namewrap', {}, [title ? el('i.pl-title', { text: title }) : null, el('b', { text: pl.name })]), el('small', { text: me ? 'You' : pl.id === L.hostId ? 'Host' : pl.connected === false ? 'Disconnected' : '' }), pl.dev ? el('span.dev-chip', { text: 'DEV' }) : null]);
+      if (dev) { // developer controls: levels, gears and XP for anyone in the room
+        const mini = (text, fn, title2) => el('button.mini', { text, title: title2 || '', onclick: fn });
+        nameCell.append(el('div.pl-dev', {}, [
+          mini('+1', () => session.grant(pl.id, { levels: 1 }), '+1 level'), mini('+5', () => session.grant(pl.id, { levels: 5 }), '+5 levels'), mini('+10', () => session.grant(pl.id, { levels: 10 }), '+10 levels'), mini('−5', () => session.grant(pl.id, { levels: -5 }), '−5 levels'),
+          mini('LVL…', () => askNumber(app, `Set ${pl.name}'s level`, pl.level, 1, pl.bot ? 60 : 99, (v) => session.grant(pl.id, { level: v })), 'Set an exact level'),
+          pl.bot ? null : mini('+100⚙', () => session.grant(pl.id, { gears: 100 }), '+100 gears'),
+          pl.bot ? null : mini('+1k⚙', () => session.grant(pl.id, { gears: 1000 }), '+1000 gears'),
+          pl.bot ? null : mini('+1k XP', () => session.grant(pl.id, { xp: 1000 }), '+1000 XP'),
+        ]));
+      }
+      row.append(nameCell);
+      if (pl.bot && admin) {
         row.append(el('div.pl-botlvl', {}, [
           el('button.mini', { text: '−', onclick: () => session.setBotLevel(pl.id, Math.max(1, pl.level - 5)) }),
           el('span', { text: `Lvl ${pl.level}` }),
@@ -142,14 +155,14 @@ export function onlineLobbyScreen(app) {
       const readyEl = el('button.pl-ready', { class: `pl-ready${ready ? '' : ' not'}`, html: ready ? '&#10004;' : 'Ready?', disabled: !me, title: me ? 'Toggle ready' : '' });
       if (me) readyEl.addEventListener('click', () => session.setReady(!pl.ready));
       row.append(readyEl);
-      if (isHost && !me) row.append(el('button.kick', { text: 'KICK', onclick: () => session.kick(pl.id) }));
+      if (admin && !me) row.append(el('button.kick', { text: 'KICK', onclick: () => session.kick(pl.id) }));
       else row.append(el('div.kick.ghost'));
       list.append(row);
     });
     const addRow = el('div.add-row');
-    if (isHost && L.players.length < 8) {
+    if (admin && L.players.length < 8) {
       addRow.append(el('button.btn.btn-small', { text: '+ ADD BOT', onclick: () => session.addBot(Math.max(1, app.profile.level + Math.floor(Math.random() * 8) - 2), BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]) }));
-    } else if (!isHost) addRow.append(el('span.muted', { text: 'Only the host can change settings and add bots.' }));
+    } else if (!admin) addRow.append(el('span.muted', { text: 'Only the host can change settings and add bots.' }));
     // chat
     const chatLog = el('div.chat-log');
     for (const c of session.chat.slice(-14)) chatLog.append(el('div.chat-line', { class: `chat-line${c.name ? '' : ' system'}`, html: c.name ? `<b>${escapeHtml(c.name)}</b> ${escapeHtml(c.text)}` : escapeHtml(c.text) }));
@@ -163,9 +176,9 @@ export function onlineLobbyScreen(app) {
     const cycleMap = (d) => { const idx = MAP_STYLES.findIndex((m) => m.id === L.settings.map); session.setSettings({ map: MAP_STYLES[(idx + d + MAP_STYLES.length) % MAP_STYLES.length].id }); };
     const mapCard = el('div.card.map-card', {}, [
       el('div.map-head', {}, [
-        el('button.mini', { text: '◀', disabled: !isHost, onclick: () => cycleMap(-1) }),
+        el('button.mini', { text: '◀', disabled: !admin, onclick: () => cycleMap(-1) }),
         el('b', { text: mapName?.name || 'Random Map' }),
-        el('button.mini', { text: '▶', disabled: !isHost, onclick: () => cycleMap(1) }),
+        el('button.mini', { text: '▶', disabled: !admin, onclick: () => cycleMap(1) }),
       ]),
       preview,
       el('small.map-desc', { text: L.settings.map === 'random' ? 'A random style is rolled when the game starts.' : mapName?.desc }),
@@ -175,11 +188,11 @@ export function onlineLobbyScreen(app) {
     table.append(el('div.srow', {}, [el('span', { text: 'Players' }), el('b', { text: `${L.players.length} / 8` })]));
     for (const def of SETTING_DEFS) {
       const idx = Math.max(0, def.values.findIndex((v) => v[0] === L.settings[def.key]));
-      const row = el('div.srow', { class: `srow${isHost ? ' clickable' : ''}` }, [el('span', { text: def.label }), el('b', { text: def.values[idx][1] })]);
-      if (isHost) row.addEventListener('click', () => session.setSettings({ [def.key]: def.values[(idx + 1) % def.values.length][0] }));
+      const row = el('div.srow', { class: `srow${admin ? ' clickable' : ''}` }, [el('span', { text: def.label }), el('b', { text: def.values[idx][1] })]);
+      if (admin) row.addEventListener('click', () => session.setSettings({ [def.key]: def.values[(idx + 1) % def.values.length][0] }));
       table.append(row);
     }
-    if (isHost) {
+    if (admin) {
       const row = el('div.srow.clickable', {}, [el('span', { text: 'Listed publicly' }), el('b', { text: L.isPublic ? 'Yes' : 'No' })]);
       row.addEventListener('click', () => session.setPublic(!L.isPublic));
       table.append(row);
@@ -218,4 +231,15 @@ export function onlineLobbyScreen(app) {
   }, 250);
   render();
   return s;
+}
+
+// Small numeric prompt in the app modal (used by developer controls).
+function askNumber(app, title, value, min, max, fn) {
+  const input = el('input', { type: 'number', value, min, max, style: { fontSize: '28px', width: '160px', textAlign: 'center' } });
+  const go = () => { const v = Math.max(min, Math.min(max, Math.round(+input.value || min))); app.closeModal(); fn(v); };
+  input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); if (e.key === 'Escape') app.closeModal(); });
+  app.modal.innerHTML = '';
+  app.modal.classList.remove('hidden');
+  app.modal.append(el('div.modal-box', {}, [el('h2', { text: title.toUpperCase() }), el('p.muted', { text: `${min} – ${max}` }), input, el('div.modal-buttons', {}, [el('button.btn.btn-primary', { text: 'APPLY', onclick: go }), el('button.btn', { text: 'CANCEL', onclick: () => app.closeModal() })])]));
+  setTimeout(() => { input.focus(); input.select(); }, 30);
 }

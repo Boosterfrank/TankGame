@@ -11,6 +11,24 @@ const LOCK_GRACE_MS = 2500;      // extra time after the client-visible deadline
 const DONE_TIMEOUT_MS = 45000;   // max wait for clients to finish simulating a volley
 const ROOM_TTL_MS = 3 * 60 * 1000;
 const START_DELAY_MS = 3000;     // countdown once everyone is ready
+// Developer access: the client sends the developer password once per connection; it is hashed here
+// and compared with the same digest the client gate uses. Verified developers get host powers in the
+// lobby and can grant levels, gears and XP to anyone in the room.
+const DEV_HASH = 'd1058ab19b2ff61646e7f6f08aecef7337b7da90c6d3f8e18a93d2b35f62735d';
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(+v || 0)));
+// Profile fields a client reports about itself (on join and after a developer grant).
+function profileFields(msg) {
+  return {
+    level: Math.max(1, Math.min(99, +msg.level || 1)),
+    unlockedIds: Array.isArray(msg.unlockedIds) ? msg.unlockedIds.slice(0, 400).map((x) => clampStr(x, 24)) : ['shot'],
+    tiers: msg.tiers && typeof msg.tiers === 'object' ? Object.fromEntries(Object.entries(msg.tiers).slice(0, 400).map(([k, v]) => [clampStr(k, 24), Math.max(1, Math.min(4, +v || 1))])) : {},
+    cosmetics: msg.cosmetics && typeof msg.cosmetics === 'object' ? Object.fromEntries(['pattern', 'accessory', 'trail', 'title'].map((k) => [k, clampStr(msg.cosmetics[k] || 'none', 16)])) : null,
+  };
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -127,7 +145,7 @@ export class Room {
     return {
       type: 'lobby', code: s.code, phase: s.phase, hostId: s.hostId, settings: s.settings, isPublic: s.isPublic,
       startIn: s.startAt ? Math.max(0, s.startAt - Date.now()) : null,
-      players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, ready: p.ready, bot: !!p.bot, connected: p.connected !== false, cosmetics: p.cosmetics || null }; }),
+      players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, ready: p.ready, bot: !!p.bot, connected: p.connected !== false, cosmetics: p.cosmetics || null, dev: !!p.dev }; }),
     };
   }
 
@@ -155,11 +173,8 @@ export class Room {
         if (s.phase !== 'lobby') { this.send(ws, { type: 'error', msg: 'That game has already started.' }); ws.close(4001, 'in progress'); return; }
         if (s.order.length >= MAX_PLAYERS) { this.send(ws, { type: 'error', msg: 'Room is full.' }); ws.close(4002, 'full'); return; }
         s.players[id] = {
-          id, name: clampStr(msg.name, 14) || 'Player', level: Math.max(1, Math.min(99, +msg.level || 1)),
+          id, name: clampStr(msg.name, 14) || 'Player', ...profileFields(msg),
           team: Math.max(1, Math.min(4, +msg.team || ((s.order.length % 4) + 1))), ready: false, connected: true,
-          unlockedIds: Array.isArray(msg.unlockedIds) ? msg.unlockedIds.slice(0, 400).map((x) => clampStr(x, 24)) : ['shot'],
-          tiers: msg.tiers && typeof msg.tiers === 'object' ? Object.fromEntries(Object.entries(msg.tiers).slice(0, 400).map(([k, v]) => [clampStr(k, 24), Math.max(1, Math.min(4, +v || 1))])) : {},
-          cosmetics: msg.cosmetics && typeof msg.cosmetics === 'object' ? Object.fromEntries(['pattern', 'accessory', 'trail', 'title'].map((k) => [k, clampStr(msg.cosmetics[k] || 'none', 16)])) : null,
         };
         s.order.push(id);
         if (!s.hostId || !s.players[s.hostId]) s.hostId = id;
@@ -175,6 +190,14 @@ export class Room {
         if (text) this.broadcast({ type: 'chat', id, name: p.name, text });
         return;
       }
+      case 'dev': {
+        if (!p) return;
+        if ((await sha256Hex(String(msg.key || '').slice(0, 64))) !== DEV_HASH) { this.send(ws, { type: 'error', msg: 'Developer access denied.' }); return; }
+        if (!p.dev) { p.dev = true; await this.save(); }
+        this.send(ws, { type: 'devOk' });
+        if (s.phase === 'lobby') this.broadcast(this.lobbyMessage());
+        return;
+      }
     }
     if (!p) return;
     if (s.phase === 'lobby') await this.lobbyMessageFrom(id, p, isHost, msg);
@@ -183,32 +206,51 @@ export class Room {
 
   async lobbyMessageFrom(id, p, isHost, msg) {
     const s = this.state;
+    const admin = isHost || !!p.dev; // verified developers get host powers
     let changed = true;
     switch (msg.type) {
       case 'team': p.team = Math.max(1, Math.min(4, +msg.team || 1)); break;
       case 'ready': p.ready = !!msg.ready; break;
+      case 'update': { // the player re-reporting its profile (level, unlocks, tiers, cosmetics)
+        const f = profileFields({ ...p, ...msg });
+        Object.assign(p, f);
+        break;
+      }
+      case 'grant': { // developer: give levels / gears / XP to a player, or set a level outright
+        if (!p.dev) return;
+        const target = s.players[msg.id];
+        if (!target) return;
+        const levels = clampNum(msg.levels, -98, 98), gears = clampNum(msg.gears, -1000000, 1000000), xp = clampNum(msg.xp, 0, 1000000);
+        const level = msg.level != null ? clampNum(msg.level, 1, 99) : null;
+        if (target.bot) { target.level = Math.max(1, Math.min(60, level ?? target.level + levels)); break; }
+        for (const w of this.sockets()) if (this.idOf(w) === msg.id) this.send(w, { type: 'devGrant', from: p.name, levels, level, gears, xp });
+        const parts = [level != null ? `level ${level}` : null, levels ? `${levels > 0 ? '+' : ''}${levels} levels` : null, gears ? `${gears > 0 ? '+' : ''}${gears} gears` : null, xp ? `+${xp} XP` : null].filter(Boolean);
+        if (parts.length) this.broadcast({ type: 'chat', system: true, text: `${p.name} (dev) gave ${target.name}: ${parts.join(', ')}` });
+        changed = false;
+        break;
+      }
       case 'settings': {
-        if (!isHost || !msg.settings || typeof msg.settings !== 'object') return;
+        if (!admin || !msg.settings || typeof msg.settings !== 'object') return;
         const allowed = ['mode', 'hp', 'wind', 'turnTime', 'tracers', 'items', 'crates', 'difficulty', 'arsenal', 'loadout', 'map', 'balance'];
         for (const k of allowed) if (k in msg.settings) s.settings[k] = typeof msg.settings[k] === 'string' ? clampStr(msg.settings[k], 24) : msg.settings[k];
         break;
       }
-      case 'public': if (!isHost) return; s.isPublic = !!msg.isPublic; break;
+      case 'public': if (!admin) return; s.isPublic = !!msg.isPublic; break;
       case 'addBot': {
-        if (!isHost || s.order.length >= MAX_PLAYERS) return;
+        if (!admin || s.order.length >= MAX_PLAYERS) return;
         const bid = 'bot-' + crypto.randomUUID().slice(0, 6);
         s.players[bid] = { id: bid, name: clampStr(msg.name, 14) || 'Bot', level: Math.max(1, Math.min(60, +msg.level || 5)), team: (s.order.length % 4) + 1, ready: true, bot: true, connected: true };
         s.order.push(bid);
         break;
       }
       case 'botLevel': {
-        if (!isHost) return;
+        if (!admin) return;
         const b = s.players[msg.id];
         if (b?.bot) b.level = Math.max(1, Math.min(60, +msg.level || 1));
         break;
       }
       case 'kick': {
-        if (!isHost || msg.id === id) return;
+        if (!admin || msg.id === id) return;
         const target = s.players[msg.id];
         if (!target) return;
         delete s.players[msg.id];
@@ -216,11 +258,11 @@ export class Room {
         for (const ws of this.sockets()) if (this.idOf(ws) === msg.id) { this.send(ws, { type: 'error', msg: 'You were kicked from the room.' }); ws.close(4003, 'kicked'); }
         break;
       }
-      case 'start': {
-        if (!isHost) return;
+      case 'start': { // developers may force a start without waiting for ready-ups
+        if (!admin) return;
         if (s.order.length < 2) { this.broadcast({ type: 'chat', system: true, text: 'Need at least two tanks to start.' }); return; }
         const notReady = this.humans().filter((h) => h !== s.hostId && !s.players[h].ready);
-        if (notReady.length) { this.broadcast({ type: 'chat', system: true, text: 'Waiting for everyone to ready up.' }); return; }
+        if (notReady.length && !p.dev) { this.broadcast({ type: 'chat', system: true, text: 'Waiting for everyone to ready up.' }); return; }
         await this.startGame();
         return;
       }

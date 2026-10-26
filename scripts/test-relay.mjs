@@ -13,7 +13,14 @@ function client(code, name) {
   const send = (o) => ws.send(JSON.stringify(o));
   const until = (pred, ms = 5000) => new Promise((res, rej) => {
     const t0 = Date.now();
-    const tick = () => { const m = inbox.find((x) => !x._used && pred(x)); if (m) { m._used = true; return res(m); } if (Date.now() - t0 > ms) return rej(new Error(`timeout waiting: ${name}`)); waiters.push(tick); setTimeout(tick, 100); };
+    let done = false; // a settled waiter must not keep polling and swallow later messages
+    const tick = () => {
+      if (done) return;
+      const m = inbox.find((x) => !x._used && pred(x));
+      if (m) { done = true; m._used = true; return res(m); }
+      if (Date.now() - t0 > ms) { done = true; return rej(new Error(`timeout waiting: ${name} (last: ${inbox.slice(-3).map((x) => x.type).join(', ')})`)); }
+      waiters.push(tick); setTimeout(tick, 100);
+    };
     tick();
   });
   const opened = new Promise((r) => { ws.onopen = r; });
@@ -31,6 +38,24 @@ await a.until((m) => m.type === 'lobby' && m.players.length === 1);
 b.send({ type: 'join', name: 'Bob', level: 3, unlockedIds: ['shot'], tiers: {} });
 const lobby = await b.until((m) => m.type === 'lobby' && m.players.length === 2);
 check(lobby.hostId === wa.id, 'first joiner is host');
+// developer access (needs the password; set DEV_KEY to exercise it)
+if (process.env.DEV_KEY) {
+  b.send({ type: 'dev', key: 'wrong-password' });
+  check(!!(await b.until((m) => m.type === 'error' && /denied/i.test(m.msg))), 'wrong developer key refused');
+  b.send({ type: 'dev', key: process.env.DEV_KEY });
+  await b.until((m) => m.type === 'devOk');
+  check(!!(await a.until((m) => m.type === 'lobby' && m.players[1]?.dev)), 'developer flag shown in lobby');
+  b.send({ type: 'settings', settings: { hp: 200 } });
+  check(!!(await a.until((m) => m.type === 'lobby' && m.settings.hp === 200)), 'non-host developer can change settings');
+  b.send({ type: 'grant', id: wa.id, levels: 5, gears: 100 });
+  const gr = await a.until((m) => m.type === 'devGrant');
+  check(gr.levels === 5 && gr.gears === 100 && gr.from === 'Bob', 'grant relayed to its target');
+  a.send({ type: 'update', level: 12, unlockedIds: ['shot', 'tri', 'big'], tiers: { shot: 2 } });
+  check(!!(await b.until((m) => m.type === 'lobby' && m.players[0].level === 12)), 'profile update reflected in lobby');
+  a.send({ type: 'grant', id: wa.id, levels: 5 });
+  await new Promise((r) => setTimeout(r, 300));
+  check(!a.inbox.some((m) => m.type === 'devGrant' && !m._used), 'non-developer grants are ignored');
+} else console.log('DEV_KEY not set: skipping developer-access checks');
 a.send({ type: 'settings', settings: { turnTime: 2, mode: 'team' } });
 const l2 = await b.until((m) => m.type === 'lobby' && m.settings.turnTime === 2);
 check(l2.settings.mode === 'team', 'settings propagate');

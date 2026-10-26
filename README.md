@@ -129,6 +129,15 @@ next volley.
 
 ## Developer tools
 
+Developers also get powers in lobbies. Offline, every player row has a level box. Online, the relay
+verifies the developer password (sent once per connection, compared as a SHA-256 digest) and then
+treats that player as a host: settings, bots, kicks and a forced start all work from any seat, and
+each player row gains buttons to add levels, set an exact level, or hand out gears and XP. Grants
+are delivered to the target client, applied to its saved profile and re-reported to the room, so
+the new level shows up for everyone. The dev panel's ROOM section has bulk versions (everyone +5,
+all bots to level 60, force start). Note that the password is kept in this browser's localStorage
+once entered so the relay can verify later sessions; LOCK in the panel clears it.
+
 A hidden developer console (profile cheats, god mode, infinite ammo, time scale, debug overlays,
 bot-aim reveal, a weapon test range and a spectator bot battle) is gated behind a password. The
 gate opens after clicking the profile avatar in the top bar five times quickly; the password hash

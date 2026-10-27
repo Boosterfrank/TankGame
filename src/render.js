@@ -296,7 +296,7 @@ export class Renderer {
     if (!opts.attract) {
       for (const tank of game.tanks) if (tank.alive) this.drawTag(ctx, tank, game, t);
       const cur = game.current;
-      if (game.phase === 'aim' && cur && !cur.locked && !game.waitingPass) this.drawAim(ctx, cur, game, t);
+      if ((game.phase === 'aim' || game.phase === 'move') && cur && !cur.locked && !game.waitingPass) this.drawAim(ctx, cur, game, t);
       if (game.dev?.revealAims) for (const tk of game.tanks) if (tk.isBot && tk.alive && tk.shot) this.drawTrajectory(ctx, tk, tk.shot, game, 'rgba(255,82,82,0.8)');
       if (game.dev?.hitboxes || game.dev?.debug) this.drawDebug(ctx, game);
     }

@@ -48,7 +48,8 @@ crates are picked up the moment you drive into one; the pickup is replayed for e
 next volley.
 
 The relay timestamps its round messages: clients measure the clock offset and show a turn timer
-that ends 2.5 s before the relay closes the round, so a shot locked at 0:00 still counts.
+that ends 2.5 s before the relay closes the round, so a shot locked at 0:00 still counts. A match
+keeps simulating in a hidden browser tab, so the room never waits on a player who switched tabs.
 
 ## Deploying the game to Cloudflare Pages
 
@@ -62,9 +63,10 @@ that ends 2.5 s before the relay closes the round, so a shot locked at 0:00 stil
 
 - **Move, then fire.** Each round opens with a move phase (8 seconds by default; the lobby's
   **Move Phase** setting offers 5, 8, 12 or off) in which everyone drives at once; DONE MOVING parks
-  your tank early. Then the aim phase starts: nobody drives, everyone aims (passing the keyboard in
-  hot-seat games), bots plan their shots, and when the turn timer ends or you press FIRE every shell
-  launches together. With the move phase off you drive while aiming, as before.
+  your tank early. Weapons, items and the aim guide are available in both phases. Then the aim phase
+  starts: nobody drives, everyone aims (passing the keyboard in hot-seat games), bots plan their
+  shots, and when the turn timer ends or you press FIRE every shell launches together. With the move
+  phase off you drive while aiming, as before.
 - **Terrain is destructible** down to the pixel: craters, tunnels, dirt walls and buried tanks.
 - **Wind** changes every round and pushes shells sideways; lasers ignore it.
 - **XP and levels.** Damage you deal earns XP. Each level unlocks new weapon families

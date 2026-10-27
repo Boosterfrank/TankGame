@@ -129,7 +129,7 @@ export class HUD {
       const body = ph === 'move' ? '<b>A D</b> DRIVE &nbsp; <b>SPACE</b> DONE MOVING' : ph === 'aim' ? '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>SPACE</b> FIRE' : '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>A D</b> DRIVE &nbsp; <b>SPACE</b> FIRE';
       this.q('.mode-hint').innerHTML = chat + body;
     });
-    this.set('canAct', !!(cur && !cur.locked && game.phase === 'aim'), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
+    this.set('canAct', !!(cur && !cur.locked && (game.phase === 'aim' || game.phase === 'move')), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
     if (this.overlayMode === 'weapons' && this.overlayTank !== t) this.renderWeapons(game, t);
   }
 
@@ -167,7 +167,7 @@ export class HUD {
   openOverlay(mode) {
     const game = this.app.game;
     const t = game?.current;
-    if (!game || !t || t.locked || game.phase !== 'aim') return;
+    if (!game || !t || t.locked || (game.phase !== 'aim' && game.phase !== 'move')) return;
     this.overlayMode = mode;
     this.query = '';
     this.overlay.classList.remove('hidden');

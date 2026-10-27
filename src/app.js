@@ -69,6 +69,9 @@ export class App {
     });
     this.show('boot');
     requestAnimationFrame((ts) => this.loop(ts));
+    // Hidden tabs get no animation frames, and the room waits for every client to finish simulating a
+    // volley: keep an online match stepping from a timer (throttled to about once a second there).
+    setInterval(() => { if (document.hidden && this.game?.online) this.backgroundStep(); }, 250);
     window.__app = this;
     window.__Game = Game;
   }
@@ -399,7 +402,7 @@ export class App {
     this.stage.addEventListener('pointerdown', () => { if (this.intro) this.intro.input(); });
     this.canvas.addEventListener('pointerdown', (e) => {
       const g = this.game;
-      if (!g || g.phase !== 'aim' || !g.current || g.current.locked || g.waitingPass) return;
+      if (!g || (g.phase !== 'aim' && g.phase !== 'move') || !g.current || g.current.locked || g.waitingPass) return;
       this.canvas.setPointerCapture(e.pointerId);
       this.input.drag = e.pointerId;
       this.aimAt(toWorld(e));
@@ -434,7 +437,7 @@ export class App {
   // One aim step per key press; holding repeats with acceleration (Shift = 5 per step).
   aimKey(code, n, shift) {
     const g = this.game;
-    if (!g || g.phase !== 'aim' || !g.current || g.current.locked || g.waitingPass) return;
+    if (!g || (g.phase !== 'aim' && g.phase !== 'move') || !g.current || g.current.locked || g.waitingPass) return;
     const step = (shift ? 5 : 1) * n;
     if (code === 'ArrowLeft') g.adjustAngle(step);
     else if (code === 'ArrowRight') g.adjustAngle(-step);
@@ -457,6 +460,17 @@ export class App {
     }
     const mv = (k.has('KeyA') ? -1 : 0) + (k.has('KeyD') ? 1 : 0) + this.input.moveBtn;
     if (mv) g.moveCurrent(Math.sign(mv), dt);
+  }
+
+  backgroundStep() {
+    const g = this.game;
+    const now = performance.now();
+    const dt = Math.min(2, (now - (this.lastTs || now)) / 1000);
+    this.lastTs = now;
+    this.acc += dt;
+    let steps = 0;
+    while (this.acc >= STEP && steps < 150) { g.update(STEP); this.acc -= STEP; steps++; }
+    if (steps >= 150) this.acc = 0;
   }
 
   // ------------------------------------------------------------ loop

@@ -92,6 +92,12 @@ const loadouts = await Promise.all([host, guest].map((p) => p.evaluate(() => win
 check(JSON.stringify(loadouts[0]) === JSON.stringify(loadouts[1]) && loadouts[0].every((l) => l.split(',').length < 40), `random loadouts identical on both clients (${loadouts[0].map((l) => l.split(',').length).join('/')} weapons)`);
 const cos = await guest.evaluate(() => window.__app.game.tanks.map((t) => t.cosmetics && t.cosmetics.pattern));
 check(cos[0] === 'stripes' && cos[1] === 'stripes', `cosmetics travel with players (${JSON.stringify(cos)})`);
+await guest.keyboard.press('KeyE'); await guest.waitForTimeout(150);
+check(await guest.evaluate(() => window.__app.hud.overlayMode === 'items' && !document.getElementById('hud').classList.contains('inactive')), 'items overlay opens during the move phase');
+await guest.keyboard.press('Escape'); await guest.waitForTimeout(100);
+await guest.keyboard.press('KeyW'); await guest.waitForTimeout(150);
+check(await guest.evaluate(() => window.__app.hud.overlayMode === 'weapons'), 'weapons overlay opens during the move phase');
+await guest.keyboard.press('Escape'); await guest.waitForTimeout(100);
 const gx0 = await guest.evaluate(() => Math.round(window.__app.game.me.x));
 await guest.keyboard.down('KeyD'); await guest.waitForTimeout(500); await guest.keyboard.up('KeyD');
 const gx1 = await guest.evaluate(() => Math.round(window.__app.game.me.x));

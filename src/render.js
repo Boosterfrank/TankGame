@@ -521,7 +521,12 @@ export class Renderer {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#cfd8dc'; ctx.fillText(`ROUND ${game.round || 1}`, WORLD_W - 248, 38);
     ctx.textAlign = 'right';
-    if (game.phase === 'aim' && game.current && game.settings.turnTime > 0) {
+    if (game.phase === 'move') {
+      ctx.fillStyle = '#4fc3ff'; ctx.font = '700 18px Rajdhani, sans-serif';
+      ctx.fillText('MOVE', WORLD_W - 90, 37);
+      ctx.font = '700 26px Rajdhani, sans-serif';
+      ctx.fillText(fmtTime(Math.max(0, game.moveTimer)), WORLD_W - 26, 40);
+    } else if (game.phase === 'aim' && game.current && game.settings.turnTime > 0) {
       const tt = game.turnTimer;
       ctx.fillStyle = tt < 6 ? '#ff5252' : '#fff';
       ctx.font = '700 26px Rajdhani, sans-serif';

@@ -166,20 +166,36 @@ export class DevTools {
       const online = !!g.online;
       const wepSel = el('select.dev-select', {}, ALL_FAMILIES.slice().sort((a, b) => a.name.localeCompare(b.name)).map((f) => el('option', { value: f.id, text: f.dev ? `${f.name} (dev)` : f.name })));
       const mapSel = el('select.dev-select', {}, MAP_STYLES.map((m) => el('option', { value: m.id, text: m.name, selected: m.id === g.terrain.styleId })));
+      // Target tank for heals, kills, ammo and items (index order is identical on every client).
+      const meIdx = Math.max(0, g.tanks.indexOf(me));
+      const tgtSel = el('select.dev-select.dev-target', {}, g.tanks.map((t, i) => el('option', { value: i, text: `${t.name}${t.isBot ? ' (bot)' : ''}${t === me ? ' (you)' : ''}${t.alive ? '' : ' †'}`, selected: i === (this.target ?? meIdx) })));
+      tgtSel.addEventListener('change', () => { this.target = +tgtSel.value; });
+      const tgt = () => +tgtSel.value;
       gameControls.push(
+        el('div.dev-row', {}, [el('span', { text: 'Target' }), tgtSel]),
         el('div.dev-row', {}, [
-          btn('HEAL ME', () => g.devOp({ type: 'heal' })),
+          btn('HEAL', () => g.devOp({ type: 'heal', target: tgt() })),
+          btn('KILL', () => g.devOp({ type: 'killone', target: tgt() }), 'danger'),
+          btn('FULL FUEL', () => g.devOp({ type: 'fuel', target: tgt() })),
           btn('KILL ENEMIES', () => g.devOp({ type: 'kill' })),
           btn('WIN NOW', () => { g.devOp({ type: 'kill' }); if (!online && g.phase === 'aim') { g.projectiles.length = 0; g.finish(); } }),
           online ? null : btn('END VOLLEY', () => { if (g.phase === 'fire') { g.projectiles.length = 0; g.spawnQueue.length = 0; g.skyLasers.length = 0; } }),
           online ? null : btn('SKIP TURN', () => { if (g.phase === 'aim') { for (const t of g.tanks) if (!t.isBot && t.alive && !t.locked) { t.shot = null; t.locked = true; } g.current = null; g.waitingPass = false; g.planNextBot(true); g.beginFire(); } }),
         ]),
         el('div.dev-row', {}, [el('span', { text: 'Wind' }), windIn, btn('SET', () => g.devOp({ type: 'wind', v: clamp(+windIn.value || 0, -12, 12) }))]),
-        el('div.dev-row', {}, [wepSel, btn('+5 AMMO', () => { if (me) { me.addAmmo(wepSel.value, 5); if (!me.tiers[wepSel.value]) me.tiers[wepSel.value] = 1; me.weaponId = wepSel.value; } }), btn('ALL +1', () => { if (me) for (const f of FAMILIES) { if (!me.tiers[f.id]) me.tiers[f.id] = 1; me.addAmmo(f.id, 1); } }), btn('H-BOMB', () => { if (me) { me.addAmmo('hbomb', 1); me.tiers.hbomb = 1; me.weaponId = 'hbomb'; } }, 'danger')]),
-        el('div.dev-row', {}, [btn('CRATE HERE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 80 * me.facing), 60, WORLD_W - 60), kind: 'weapon' }); }), btn('REPAIR CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x - 80 * me.facing), 60, WORLD_W - 60), kind: 'health' }); }), btn('ITEM CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 140 * me.facing), 60, WORLD_W - 60), kind: 'item' }); }), btn('ALL ITEMS', () => { if (me) for (const it of ALL_ITEMS) me.items[it.id] = 3; })]),
+        el('div.dev-row', {}, [wepSel, btn('+5 AMMO', () => g.devOp({ type: 'ammo', target: tgt(), weapon: wepSel.value, n: 5 })), btn('ALL +1', () => g.devOp({ type: 'ammo', target: tgt(), weapon: '*', n: 1 })), btn('H-BOMB', () => g.devOp({ type: 'ammo', target: tgt(), weapon: 'hbomb', n: 1 }), 'danger')]),
+        el('div.dev-row', {}, [btn('CRATE HERE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 80 * me.facing), 60, WORLD_W - 60), kind: 'weapon' }); }), btn('REPAIR CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x - 80 * me.facing), 60, WORLD_W - 60), kind: 'health' }); }), btn('ITEM CRATE', () => { if (me) g.devOp({ type: 'crate', x: clamp(Math.round(me.x + 140 * me.facing), 60, WORLD_W - 60), kind: 'item' }); }), btn('ALL ITEMS', () => g.devOp({ type: 'items', target: tgt(), n: 3 }))]),
         el('div.dev-row', {}, [mapSel, btn('REGEN TERRAIN', () => { g.devOp({ type: 'terrain', style: mapSel.value, seed: Math.floor(Math.random() * 1e9) }); this.note('terrain regenerated'); })]),
       );
-      gameControls.push(el('div.muted', { text: online ? 'Online: heal, kills, crates, wind, terrain and god mode are sent to everyone with your next lock-in. Ammo and items stay local (shots carry the weapon).' : 'Offline sandbox: everything applies instantly.' }));
+      gameControls.push(el('div.muted', { text: online ? 'Online: everything above (heals, kills, ammo, items, crates, wind, terrain, god mode) is applied here now and replayed by everyone with your next lock-in.' : 'Offline sandbox: everything applies instantly.' }));
+      if (online && app.session) { // relay-verified developer: profile grants for the humans in this match
+        const session = app.session;
+        const humans = g.tanks.filter((t) => !t.isBot && t.netId);
+        const pSel = el('select.dev-select', {}, humans.map((t) => el('option', { value: t.netId, text: `${t.name}${t === me ? ' (you)' : ''}` })));
+        gameControls.push(session.isDev
+          ? el('div.dev-row', {}, [pSel, btn('+5 LEVELS', () => session.grant(pSel.value, { levels: 5 })), btn('+500 GEARS', () => session.grant(pSel.value, { gears: 500 })), btn('+1000 XP', () => session.grant(pSel.value, { xp: 1000 }))])
+          : el('div.muted', { text: this.key ? 'Profile grants need relay verification (re-join the room).' : 'Re-enter the developer password to grant levels, gears and XP online.' }));
+      }
     } else {
       gameControls.push(el('div.dev-row', {}, [btn('WEAPON TEST RANGE', () => this.testRange()), btn('BOT BATTLE (SPECTATE)', () => this.botBattle())]));
     }
@@ -207,7 +223,7 @@ export class DevTools {
   testRange() {
     const app = this.app;
     app.startGame({
-      settings: { ...DEFAULT_SETTINGS, arsenal: 'all', dummies: true, turnTime: 0, wind: 'none', crates: false, map: 'flats', hp: 300 },
+      settings: { ...DEFAULT_SETTINGS, arsenal: 'all', dummies: true, turnTime: 0, moveTime: 0, wind: 'none', crates: false, map: 'flats', hp: 300 },
       players: [{ name: app.profile.name, isBot: false, team: 1, isProfile: true }, ...[0, 1, 2].map((i) => ({ name: `Target ${i + 1}`, isBot: true, team: 2 + i, level: 1 }))],
       seed: Math.floor(Math.random() * 1e9),
     });
@@ -220,7 +236,7 @@ export class DevTools {
     const app = this.app;
     const names = BOT_NAMES.slice(0, 8);
     app.startGame({
-      settings: { ...DEFAULT_SETTINGS, arsenal: 'all', difficulty: 'Hard', turnTime: 15 },
+      settings: { ...DEFAULT_SETTINGS, arsenal: 'all', difficulty: 'Hard', turnTime: 15, moveTime: 0 },
       players: names.map((n, i) => ({ name: n, isBot: true, team: 100 + i, level: 50 })),
       seed: Math.floor(Math.random() * 1e9),
     });

@@ -276,7 +276,7 @@ export class App {
     const players = config.players.map((p) => (p.isBot || config.online) ? p : { ...p, unlockedIds: ids, tiers, level: p.isProfile ? this.profile.level : (p.level || this.profile.level), cosmetics: p.isProfile ? cosmeticsOf(this.profile) : null });
     this.show(null);
     this.audio.init();
-    this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio, online: config.online || null, deadline: config.deadline || null });
+    this.game = new Game({ settings: config.settings, players, seed: config.seed, audio: this.audio, online: config.online || null, deadline: config.deadline || null, moveUntil: config.moveUntil || null });
     const g = this.game;
     g.dev = this.dev.flags;
     this.acc = 0;
@@ -292,7 +292,8 @@ export class App {
     g.on.gameOver = (results) => this.endGame(results);
     g.on.crate = (tank, text) => { if (!tank.isBot) this.toast(text); };
     g.on.phase = (phase) => {
-      if (phase === 'aim') this.renderer.showBanner(`ROUND ${g.round}`, g.round === 1 ? MAP_STYLES.find((m) => m.id === g.terrain.styleId)?.name || '' : '', '#fff', 1.6);
+      if (phase === 'move') this.renderer.showBanner(`ROUND ${g.round}`, g.round === 1 ? MAP_STYLES.find((m) => m.id === g.terrain.styleId)?.name || '' : 'Move out', '#4fc3ff', 1.6);
+      if (phase === 'aim') this.renderer.showBanner(g.moveTime > 0 ? 'AIM!' : `ROUND ${g.round}`, g.moveTime > 0 ? 'Lock in your shot' : g.round === 1 ? MAP_STYLES.find((m) => m.id === g.terrain.styleId)?.name || '' : '', '#fff', 1.4);
       if (phase === 'fire') this.renderer.showBanner('FIRE!', '', '#ff7043', 0.9);
       if (phase === 'over') {
         const me = g.tanks.find((t) => t.isProfile);
@@ -443,7 +444,7 @@ export class App {
 
   handleHeldKeys(dt) {
     const g = this.game;
-    if (!g || g.phase !== 'aim' || !g.current || g.current.locked || g.waitingPass) return;
+    if (!g || (g.phase !== 'aim' && g.phase !== 'move') || !g.current || g.current.locked || g.waitingPass) return;
     const k = this.input.keys;
     const shift = k.has('ShiftLeft') || k.has('ShiftRight');
     for (const [code, h] of this.input.holds) {

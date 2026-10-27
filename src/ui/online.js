@@ -141,12 +141,15 @@ export function onlineLobbyScreen(app) {
           el('button.mini', { text: '+', onclick: () => session.setBotLevel(pl.id, Math.min(60, pl.level + 5)) }),
         ]));
       } else row.append(el('div.pl-botlvl.ghost', { text: pl.bot ? `Lvl ${pl.level}` : '' }));
-      const canTeam = teamMode && me;
-      row.append(el('div.pl-team', { class: `pl-team${teamMode ? '' : ' off'}` }, [
+      // Everyone picks their own team; the host (or a developer) can place anyone, bots included.
+      // Teams only matter in Team Battle, but they can be arranged ahead of switching the mode.
+      const canTeam = me || admin;
+      const tid = me ? null : pl.id;
+      row.append(el('div.pl-team', { class: `pl-team${teamMode ? '' : ' off'}`, title: teamMode ? 'Team' : 'Teams apply in Team Battle (Mode setting)' }, [
         el('small', { text: 'TEAM' }),
-        el('button.mini', { text: '◀', disabled: !canTeam, onclick: () => session.setTeam(((pl.team - 2 + 4) % 4) + 1) }),
-        el('b', { text: teamMode ? pl.team : '?' }),
-        el('button.mini', { text: '▶', disabled: !canTeam, onclick: () => session.setTeam((pl.team % 4) + 1) }),
+        el('button.mini', { text: '◀', disabled: !canTeam, onclick: () => session.setTeam(((pl.team - 2 + 4) % 4) + 1, tid) }),
+        el('b', { text: pl.team }),
+        el('button.mini', { text: '▶', disabled: !canTeam, onclick: () => session.setTeam((pl.team % 4) + 1, tid) }),
       ]));
       const tankPrev = el('canvas.pl-tank', { width: 70, height: 40 });
       drawMiniTank(tankPrev, teamMode ? ['#4cff5e', '#4fc3ff', '#ff4b4b', '#ffd740'][pl.team - 1] : (me ? '#4cff5e' : '#ff4b4b'), 1.1, pl.cosmetics);

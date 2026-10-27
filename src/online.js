@@ -19,6 +19,7 @@ export class OnlineSession {
     this.latency = null; this.pingAt = 0;
     this.pingTimer = null;
     this.isDev = false; // relay-verified developer
+    this.clockOffset = 0; // relay clock minus ours, measured from timestamped messages
   }
 
   get isHost() { return !!this.myId && this.hostId === this.myId; }
@@ -75,6 +76,7 @@ export class OnlineSession {
   send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); }
 
   handle(m) {
+    if (typeof m.now === 'number') this.clockOffset = m.now - Date.now();
     switch (m.type) {
       case 'lobby': this.lobby = m; this.hostId = m.hostId; this.phase = m.phase; this.startDeadline = m.startIn != null ? performance.now() + m.startIn : null; this.emit('lobby', m); break;
       case 'chat': this.chat.push({ name: m.system ? null : m.name, text: m.text, t: Date.now() }); if (this.chat.length > 60) this.chat.shift(); this.emit('chat', m); if (this.game) this.game.message(m.system ? m.text : `${m.name}: ${m.text}`, m.system ? '#90a4ae' : '#80deea'); break;
@@ -102,16 +104,16 @@ export class OnlineSession {
       name: p.name, isBot: !!p.bot, team: p.team, level: p.level, netId: p.id,
       isProfile: p.id === this.myId, unlockedIds: p.unlockedIds || ['shot'], tiers: p.tiers || {}, cosmetics: p.cosmetics || null,
     }));
-    this.app.startGame({ settings: m.settings, players, seed: m.seed, online: this, deadline: m.deadline });
+    this.app.startGame({ settings: m.settings, players, seed: m.seed, online: this, deadline: m.deadline, moveUntil: m.moveUntil || null });
   }
 
   bind(game) {
     this.game = game;
     game.on.lock = (payload) => this.send({ type: 'lock', round: game.round, ...payload });
     game.on.volleyDone = (round, snapshot, over) => this.send({ type: 'done', round, snapshot, over });
-    game.on.move = (x) => {
+    game.on.move = (x, force = false) => {
       const now = performance.now();
-      if (now - this.moveAt > 120) { this.moveAt = now; this.send({ type: 'move', x: Math.round(x) }); }
+      if (force || now - this.moveAt > 120) { this.moveAt = now; this.send({ type: 'move', x: Math.round(x) }); }
     };
   }
 
@@ -142,7 +144,7 @@ export class OnlineSession {
 
   sendChat(text) { const t = String(text || '').trim(); if (t) this.send({ type: 'chat', text: t.slice(0, 160) }); }
   setReady(ready) { this.send({ type: 'ready', ready: !!ready }); }
-  setTeam(team) { this.send({ type: 'team', team }); }
+  setTeam(team, id = null) { this.send(id ? { type: 'team', team, id } : { type: 'team', team }); }
   setSettings(settings) { this.send({ type: 'settings', settings }); }
   setPublic(isPublic) { this.send({ type: 'public', isPublic }); }
   addBot(level, name) { this.send({ type: 'addBot', level, name }); }

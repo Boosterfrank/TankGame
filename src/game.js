@@ -16,10 +16,12 @@ const WIND_MAX = { none: 0, low: 3, medium: 6, high: 9, crazy: 12 };
 const SUDDEN_DEATH_ROUND = 30;
 
 export class Game {
-  constructor({ settings, players, seed, audio, online = null, deadline = null }) {
+  constructor({ settings, players, seed, audio, online = null, deadline = null, moveUntil = null }) {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     this.online = online;              // OnlineSession when playing over the relay
-    this.deadlineAt = deadline;        // server deadline (ms epoch) for the current aim phase
+    this.deadlineAt = deadline;        // server deadline (ms epoch, server clock) for the current aim phase
+    this.moveUntil = moveUntil;        // server time the move phase ends (null = no move phase)
+    this.moveTimer = 0;
     this.lockInfo = null;              // { count, needed } from the relay
     this.dev = null;                   // developer-tools flags (see ui/devtools.js)
     this.seed = seed ?? (Math.random() * 2 ** 31) | 0;
@@ -135,17 +137,64 @@ export class Game {
   }
 
   // ------------------------------------------------------------ phases
-  beginAim() {
-    this.phase = 'aim';
-    for (const t of this.tanks) { t.locked = false; t.shot = null; t.roundItems = []; t.roundCrates = []; t.roundDev = []; t.itemsAtRound = { ...t.items }; t.arsenalAtRound = new Set([...t.arsenal.keys()].filter((id) => t.ammo(id) > 0)); }
+  // Seconds of the move phase; 0 means the old behavior (drive while aiming).
+  get moveTime() { return Math.max(0, +this.settings.moveTime || 0); }
+  // Current time on the relay's clock (the session measures the offset), or local time offline.
+  now() { return Date.now() + (this.online?.clockOffset || 0); }
+
+  // A round: everyone drives (move phase), then everyone aims and locks in (aim phase).
+  beginRound() {
+    for (const t of this.tanks) { t.locked = false; t.shot = null; t.moved = false; t.roundItems = []; t.roundCrates = []; t.roundDev = []; t.itemsAtRound = { ...t.items }; t.arsenalAtRound = new Set([...t.arsenal.keys()].filter((id) => t.ammo(id) > 0)); }
     this.lockInfo = null;
     const o = this.online;
     this.botsToPlan = (o && !o.isHost) || this.settings.dummies ? [] : this.tanks.filter((t) => t.isBot && t.alive);
     this.waitingPass = false;
+    if (this.moveTime > 0) this.beginMove(); else this.beginAim();
+  }
+
+  beginMove() {
+    this.phase = 'move';
+    if (this.online) {
+      const me = this.me;
+      this.current = me && me.alive ? me : null;
+      this.moveTimer = this.moveUntil ? Math.max(0, (this.moveUntil - this.now()) / 1000) : this.moveTime;
+      this.on.phase?.('move');
+      return;
+    }
+    const humans = this.humansAlive();
+    this.current = humans[0] || null;
+    this.moveTimer = this.moveTime;
+    if (!this.current) { this.beginAim(); return; } // nobody human left: straight to the bots' aim phase
+    if (this.humans > 1) { this.waitingPass = true; this.on.pass?.(this.current); }
+    this.on.phase?.('move');
+  }
+
+  // The current human is done driving. Offline the keyboard passes to the next human, then aiming
+  // starts; online the shared move window simply runs out (the button just parks your tank).
+  endMove() {
+    if (this.phase !== 'move') return;
+    const t = this.current;
+    if (t) t.moved = true;
+    if (this.online) { if (t) this.on.move?.(t.x, true); return; }
+    const next = this.humansAlive().find((h) => !h.moved);
+    if (next) {
+      this.current = next; this.moveTimer = this.moveTime;
+      if (this.humans > 1) { this.waitingPass = true; this.on.pass?.(next); }
+      return;
+    }
+    this.beginAim();
+  }
+
+  beginAim() {
+    const wasMoving = this.phase === 'move';
+    this.phase = 'aim';
+    this.waitingPass = false;
+    const o = this.online;
     if (o) {
       const me = this.me;
       this.current = me && me.alive ? me : null;
-      this.turnTimer = this.deadlineAt ? Math.max(0.5, (this.deadlineAt - Date.now()) / 1000) : this.settings.turnTime;
+      if (wasMoving && this.current && !this.current.moved) this.on.move?.(this.current.x, true); // final parking spot, unthrottled
+      this.turnTimer = this.deadlineAt ? Math.max(0.5, (this.deadlineAt - this.now()) / 1000) : this.settings.turnTime;
       if (!this.current) { this.planNextBot(true); this.on.lock?.(this.buildLockPayload(null)); }
       this.on.phase?.('aim');
       return;
@@ -171,9 +220,10 @@ export class Game {
   serverAim(msg) {
     if (this.phase === 'over') return;
     if (this.phase === 'fire') { this.projectiles.length = 0; this.spawnQueue.length = 0; this.skyLasers.length = 0; this.phase = 'waiting'; }
-    if (this.phase === 'intro') { this.introT = 0; this.round = 1; this.beginAim(); }
+    if (this.phase === 'intro') { this.introT = 0; this.round = 1; this.beginRound(); }
     if (msg.snapshot && !this.online.isHost) this.applySnapshot(msg.snapshot);
     this.deadlineAt = msg.deadline || null;
+    this.moveUntil = msg.moveUntil || null;
     this.round = (msg.round || this.round + 1) - 1;
     this.nextRound();
   }
@@ -182,7 +232,8 @@ export class Game {
   applyVolley(msg) {
     const o = this.online;
     if (!o || this.phase === 'over') return;
-    if (this.phase === 'intro') { this.introT = 0; this.round = 1; this.beginAim(); }
+    if (this.phase === 'intro') { this.introT = 0; this.round = 1; this.beginRound(); }
+    if (this.phase === 'move') this.beginAim(); // the relay closed the round while our clock still showed the move phase
     if (this.phase !== 'aim') return;
     for (const t of this.tanks) { t.shot = null; t.locked = false; }
     for (const e of msg.entries || []) {
@@ -221,7 +272,7 @@ export class Game {
 
   setRemoteX(id, x) {
     const t = this.tankByNet(id);
-    if (!t || !t.alive || this.phase !== 'aim') return;
+    if (!t || !t.alive || (this.phase !== 'aim' && this.phase !== 'move')) return;
     t.x = clamp(Math.round(x), 10, WORLD_W - 10);
     t.y = this.terrain.surfaceY(t.x, Math.max(0, t.y - 60));
   }
@@ -256,6 +307,7 @@ export class Game {
   // Lock in the current human's shot.
   fire() {
     const t = this.current;
+    if (this.phase === 'move') { if (!this.waitingPass) this.endMove(); return; }
     if (this.phase !== 'aim' || !t || t.locked || this.waitingPass) return;
     const w = this.currentWeapon(t);
     t.shot = { weaponId: w.id, angle: t.angle, power: t.power };
@@ -343,7 +395,7 @@ export class Game {
       if (this.aliveTeams().length <= 1) { this.finish(); return; }
     }
     for (const t of this.tanks) if (t.alive) t.xp += 5;
-    this.beginAim();
+    this.beginRound();
   }
 
   finish() {
@@ -378,13 +430,23 @@ export class Game {
     switch (this.phase) {
       case 'intro':
         this.introT -= dt;
-        if (this.introT <= 0) { this.round = 1; this.beginAim(); }
+        if (this.introT <= 0) { this.round = 1; this.beginRound(); }
+        break;
+      case 'move':
+        if (this.waitingPass) break;
+        if (this.online) {
+          this.moveTimer = this.moveUntil ? (this.moveUntil - this.now()) / 1000 : 0;
+          if (this.moveTimer <= 0) { this.moveTimer = 0; this.beginAim(); }
+          break;
+        }
+        if (!this.current) { this.beginAim(); break; }
+        if (!this.dev?.noTimer) { this.moveTimer -= dt; if (this.moveTimer <= 0) { this.moveTimer = 0; this.endMove(); } }
         break;
       case 'aim':
         if (this.waitingPass) break;
         if (this.online) {
           if (this.current && !this.current.locked && this.deadlineAt && !this.dev?.noTimer) {
-            this.turnTimer = (this.deadlineAt - Date.now()) / 1000;
+            this.turnTimer = (this.deadlineAt - this.now()) / 1000;
             if (this.turnTimer <= 0) { this.turnTimer = 0; this.fire(); }
           }
           this.planNextBot();
@@ -421,7 +483,8 @@ export class Game {
     this.headless = true;
     let n = 0;
     while (this.phase !== 'over' && n++ < 40000) {
-      if (this.phase === 'aim' && this.waitingPass) this.waitingPass = false;
+      if (this.waitingPass) this.waitingPass = false;
+      if (this.phase === 'move') this.beginAim();
       this.update(1 / 30);
     }
     this.headless = false;
@@ -454,7 +517,8 @@ export class Game {
   }
   moveCurrent(dir, dt) {
     const t = this.current;
-    if (!t || t.locked || this.phase !== 'aim' || this.waitingPass) return;
+    const driving = this.phase === 'move' ? !t?.moved : (this.phase === 'aim' && this.moveTime <= 0);
+    if (!t || t.locked || !driving || this.waitingPass) return;
     if (t.move(dir, dt, this.terrain)) {
       this.audio.engine(true);
       if (this.online) this.on.move?.(t.x);
@@ -477,7 +541,7 @@ export class Game {
   // Items are applied immediately; online, the payload (random choices) is replayed on other clients.
   useItem(id, tank = this.current, payload = null, replay = false) {
     if (!tank || !tank.alive || !(tank.items[id] > 0)) return false;
-    if (!replay && tank === this.current && (tank.locked || this.phase !== 'aim')) return false;
+    if (!replay && tank === this.current && (tank.locked || (this.phase !== 'aim' && this.phase !== 'move'))) return false;
     payload = payload || {};
     const it = ITEM_BY_ID[id];
     if (!it) return false;
@@ -802,8 +866,8 @@ export class Game {
         if (c.y > WORLD_H + 40) { this.crates.splice(i, 1); continue; }
       } else if (!this.terrain.solid(c.x, c.y + 14)) { c.landed = false; c.vy = 0; }
     }
-    if (this.online && this.phase === 'aim') {
-      // Only the local player picks up during the aim phase; the pickup is replayed by everyone at the volley.
+    if (this.online && (this.phase === 'aim' || this.phase === 'move')) {
+      // Only the local player picks up during the move/aim phases; the pickup is replayed by everyone at the volley.
       const me = this.me;
       if (me && me.alive && !me.locked) this.checkCratePickups(me, true);
     } else this.checkCratePickups();
@@ -871,9 +935,22 @@ export class Game {
   }
 
   applyDevOp(op, tank, replay) {
+    // Ops can name another tank by index (same order on every client); default is the developer's own.
+    const victim = op.target != null && op.target !== '' && this.tanks[+op.target] ? this.tanks[+op.target] : tank;
     switch (op.type) {
-      case 'heal': if (tank?.alive) { tank.hp = tank.maxHp; tank.armor = PHYS.maxArmor; this.fx.explosion(tank.x, tank.cy, 40, '#69f0ae', { heal: true }); } break;
+      case 'heal': if (victim?.alive) { victim.hp = victim.maxHp; victim.armor = PHYS.maxArmor; this.fx.explosion(victim.x, victim.cy, 40, '#69f0ae', { heal: true }); } break;
       case 'kill': if (tank) for (const o of this.tanks) if (o.alive && o !== tank && o.team !== tank.team) this.killTank(o, tank); break;
+      case 'killone': if (victim?.alive) this.killTank(victim, tank && tank !== victim ? tank : null); break;
+      case 'fuel': if (victim) victim.fuel = victim.maxFuel; break;
+      case 'ammo': {
+        if (!victim) break;
+        const n = Math.max(1, Math.min(99, Math.round(+op.n || 1)));
+        const ids = op.weapon === '*' ? FAMILIES.map((f) => f.id) : FAMILY_BY_ID[op.weapon] ? [op.weapon] : [];
+        for (const id of ids) { if (!victim.tiers[id]) victim.tiers[id] = 1; victim.addAmmo(id, n); }
+        if (ids.length === 1 && victim === this.me && !replay) victim.weaponId = ids[0];
+        break;
+      }
+      case 'items': if (victim) { const n = Math.max(1, Math.min(9, Math.round(+op.n || 3))); for (const it of ITEMS) victim.items[it.id] = Math.max(victim.items[it.id] || 0, n); } break;
       case 'crate': this.spawnCrate(clamp(Math.round(+op.x || 0), 60, WORLD_W - 60), op.kind === 'health' ? 'health' : op.kind === 'item' ? 'item' : 'weapon'); break;
       case 'wind': this.wind = clamp(+op.v || 0, -12, 12); break;
       case 'terrain': {
@@ -884,6 +961,6 @@ export class Game {
       }
       default: return;
     }
-    this.message(`DEV: ${tank?.name || 'someone'} used ${op.type}`, '#ea80fc');
+    this.message(`DEV: ${tank?.name || 'someone'} used ${op.type}${victim && victim !== tank ? ` on ${victim.name}` : ''}`, '#ea80fc');
   }
 }

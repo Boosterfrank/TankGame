@@ -28,7 +28,7 @@ const report = await page.evaluate(async () => {
       const r = { id: fam.id, tier, ok: true };
       try {
         const g = new Game({
-          settings: { arsenal: 'all', turnTime: 0, items: false, crates: false, wind: 'none', map: 'hills', difficulty: 'Normal' },
+          settings: { arsenal: 'all', turnTime: 0, moveTime: 0, items: false, crates: false, wind: 'none', map: 'hills', difficulty: 'Normal' },
           players: [{ name: 'Me', isBot: false, team: 1, isProfile: true }, { name: 'Bot', isBot: true, team: 2, level: 1 }, { name: 'Bot2', isBot: true, team: 3, level: 1 }],
           seed: 1234, audio: app.audio,
         });

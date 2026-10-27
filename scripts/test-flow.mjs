@@ -27,6 +27,7 @@ await page.click('text=CUSTOM GAME'); await page.waitForTimeout(200);
 await page.click('text=+ ADD LOCAL PLAYER');
 await page.click('.srow.clickable:has-text("Mode")');   // -> Team Battle
 await page.click('.srow.clickable:has-text("Weapons")'); // -> Everything
+await page.evaluate(() => { window.__app.lobby.settings.moveTime = 0; }); // hot-seat flow below fires straight away
 await page.waitForTimeout(200);
 if (shots) await page.screenshot({ path: `${outDir}/12-lobby-team.png` });
 await page.click('text=START GAME');

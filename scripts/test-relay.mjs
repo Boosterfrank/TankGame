@@ -56,8 +56,13 @@ if (process.env.DEV_KEY) {
   await new Promise((r) => setTimeout(r, 300));
   check(!a.inbox.some((m) => m.type === 'devGrant' && !m._used), 'non-developer grants are ignored');
 } else console.log('DEV_KEY not set: skipping developer-access checks');
-a.send({ type: 'settings', settings: { turnTime: 2, mode: 'team' } });
+a.send({ type: 'settings', settings: { turnTime: 2, mode: 'team', moveTime: 0 } });
 const l2 = await b.until((m) => m.type === 'lobby' && m.settings.turnTime === 2);
+check(l2.settings.moveTime === 0, 'move phase setting propagates');
+b.send({ type: 'team', team: 4 });
+check(!!(await a.until((m) => m.type === 'lobby' && m.players[1]?.team === 4)), 'player picks own team');
+a.send({ type: 'team', team: 2, id: l2.players[1].id });
+check(!!(await b.until((m) => m.type === 'lobby' && m.players[1]?.team === 2)), 'host assigns another player\'s team');
 check(l2.settings.mode === 'team', 'settings propagate');
 a.send({ type: 'addBot', level: 9, name: 'Rook' });
 await b.until((m) => m.type === 'lobby' && m.players.length === 3);
@@ -73,7 +78,7 @@ const cd = await b.until((m) => m.type === 'lobby' && m.startIn != null);
 check(cd.startIn > 1000 && cd.startIn <= 3000, `countdown announced (${cd.startIn})`);
 const start = await b.until((m) => m.type === 'start', 8000);
 check(start.players.length === 3 && start.players[2].bot && start.players[0].unlockedIds.includes('tri'), 'start payload');
-check(start.deadline > Date.now(), 'deadline set');
+check(start.deadline > Date.now() && typeof start.now === 'number' && Math.abs(start.now - Date.now()) < 2000 && start.moveUntil === null, 'deadline, server clock and no move window in start payload');
 // round 1: A locks with bots, B does nothing -> alarm fires volley after deadline (2s + grace)
 a.send({ type: 'lock', round: 1, x: 100, shot: { weaponId: 'shot', angle: 45, power: 70 }, items: [], bots: { 2: { weaponId: 'shot', angle: 90, power: 50 } } });
 await b.until((m) => m.type === 'locked' && m.count === 1);

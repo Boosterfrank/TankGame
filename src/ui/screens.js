@@ -102,6 +102,7 @@ export const SETTING_DEFS = [
   { key: 'mode', label: 'Mode', values: [['deathmatch', 'Deathmatch'], ['team', 'Team Battle']] },
   { key: 'hp', label: 'HP', values: [[100, '100'], [150, '150'], [200, '200'], [300, '300']] },
   { key: 'wind', label: 'Wind', values: [['none', 'None'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['crazy', 'Crazy']] },
+  { key: 'moveTime', label: 'Move Phase', values: [[8, '8 s'], [5, '5 s'], [12, '12 s'], [0, 'Off: drive while aiming']] },
   { key: 'turnTime', label: 'Turn Time', values: [[15, '15'], [30, '30'], [45, '45'], [60, '60'], [0, 'Unlimited']] },
   { key: 'tracers', label: 'Shot Tracers', values: [[true, 'On'], [false, 'Off']] },
   { key: 'items', label: 'Items', values: [[true, 'On'], [false, 'Off']] },

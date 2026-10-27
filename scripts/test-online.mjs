@@ -60,6 +60,19 @@ if (process.env.DEV_KEY) { // developer powers: the host is a verified developer
 await host.click('text=+ ADD BOT');
 await host.waitForFunction(() => window.__app.session?.lobby?.players.length === 3);
 await host.click('.srow.clickable:has-text("Turn Time")'); // 30 -> 45
+await host.click('.srow.clickable:has-text("Move Phase")'); // 8 -> 5 s
+await host.waitForFunction(() => window.__app.session.lobby.settings.moveTime === 5);
+// teams: switch to Team Battle, the guest picks its own team, the host places the guest
+await host.click('.srow.clickable:has-text("Mode")'); // -> Team Battle
+await guest.waitForFunction(() => window.__app.session.lobby.settings.mode === 'team');
+const guestTeam0 = await guest.evaluate(() => window.__app.session.lobby.players.find((p) => p.id === window.__app.session.myId).team);
+await guest.click('.player-row.me .pl-team button:last-child');
+await host.waitForFunction((t0) => window.__app.session.lobby.players.find((p) => p.id !== window.__app.session.myId && !p.bot).team === (t0 % 4) + 1, guestTeam0, { timeout: 5000 });
+await host.click('.player-row:not(.me) .pl-team button:last-child');
+await guest.waitForFunction((t0) => window.__app.session.lobby.players.find((p) => p.id === window.__app.session.myId).team === ((t0 + 1) % 4) + 1, guestTeam0, { timeout: 5000 });
+check(true, 'teams picked by the player and assigned by the host');
+await host.click('.srow.clickable:has-text("Mode")'); // back to Deathmatch
+await guest.waitForFunction(() => window.__app.session.lobby.settings.mode === 'deathmatch');
 await guest.fill('.chat-input', 'hello from guest');
 await guest.press('.chat-input', 'Enter');
 await host.waitForFunction(() => window.__app.session.chat.some((c) => c.text === 'hello from guest'));
@@ -69,8 +82,9 @@ await host.click('.lobby-right button:has-text("READY")');
 await host.waitForFunction(() => window.__app.session?.startDeadline != null, null, { timeout: 10000 });
 await host.waitForTimeout(300);
 if (shots) await host.screenshot({ path: `${outDir}/31-online-lobby.png` });
-await host.waitForFunction(() => window.__app.game && window.__app.game.phase === 'aim', null, { timeout: 15000 });
-await guest.waitForFunction(() => window.__app.game && window.__app.game.phase === 'aim', null, { timeout: 15000 });
+// move phase first: the guest drives, the host sees it move, then both reach the aim phase together
+await host.waitForFunction(() => window.__app.game && window.__app.game.phase === 'move', null, { timeout: 15000 });
+await guest.waitForFunction(() => window.__app.game && window.__app.game.phase === 'move', null, { timeout: 15000 });
 const seeds = await Promise.all([host, guest].map((p) => p.evaluate(() => ({ seed: window.__app.game.seed, tanks: window.__app.game.tanks.map((t) => [t.name, t.isBot, Math.round(t.x), t.netId]) }))));
 check(seeds[0].seed === seeds[1].seed, 'same seed');
 check(JSON.stringify(seeds[0].tanks) === JSON.stringify(seeds[1].tanks), 'same tank setup');
@@ -78,12 +92,22 @@ const loadouts = await Promise.all([host, guest].map((p) => p.evaluate(() => win
 check(JSON.stringify(loadouts[0]) === JSON.stringify(loadouts[1]) && loadouts[0].every((l) => l.split(',').length < 40), `random loadouts identical on both clients (${loadouts[0].map((l) => l.split(',').length).join('/')} weapons)`);
 const cos = await guest.evaluate(() => window.__app.game.tanks.map((t) => t.cosmetics && t.cosmetics.pattern));
 check(cos[0] === 'stripes' && cos[1] === 'stripes', `cosmetics travel with players (${JSON.stringify(cos)})`);
+const gx0 = await guest.evaluate(() => Math.round(window.__app.game.me.x));
+await guest.keyboard.down('KeyD'); await guest.waitForTimeout(500); await guest.keyboard.up('KeyD');
+const gx1 = await guest.evaluate(() => Math.round(window.__app.game.me.x));
+check(gx1 > gx0, `guest drove during the move phase (${gx0} -> ${gx1})`);
+await host.waitForFunction((x) => Math.abs(window.__app.game.tanks.find((t) => t.netId !== window.__app.session.myId && !t.isBot).x - x) < 12, gx1, { timeout: 5000 });
+check(await guest.evaluate(() => { const g = window.__app.game; g.fire(); return g.phase === 'move' && !!g.me.moved; }), 'firing in the move phase only parks the tank');
+await guest.keyboard.down('KeyD'); await guest.waitForTimeout(250); await guest.keyboard.up('KeyD');
+check(await guest.evaluate((x) => Math.round(window.__app.game.me.x) === x, gx1), 'a parked tank no longer drives');
+await host.waitForFunction(() => window.__app.game && window.__app.game.phase === 'aim', null, { timeout: 15000 });
+await guest.waitForFunction(() => window.__app.game && window.__app.game.phase === 'aim', null, { timeout: 15000 });
+check(await guest.evaluate(() => { const g = window.__app.game; const x = g.me.x; g.moveCurrent(1, 0.2); return g.me.x === x; }), 'no driving once the aim phase starts');
 // dev-op replication + crate pickup: the guest spawns a weapon crate on itself, picks it up at once,
 // and the host replays both the spawn and the pickup at the volley.
 await guest.evaluate(() => { const g = window.__app.game; g.devOp({ type: 'crate', x: Math.round(g.me.x), kind: 'weapon' }); });
 await guest.waitForFunction(() => (window.__app.game.me.roundCrates || []).length === 1 && window.__app.game.crates.length === 0, null, { timeout: 5000 });
-// guest moves, both lock
-await guest.keyboard.down('KeyD'); await guest.waitForTimeout(400); await guest.keyboard.up('KeyD');
+// both lock
 await guest.evaluate(() => { const g = window.__app.game; g.current.angle = 120; g.current.power = 75; const sh = ['shield3', 'shield2', 'shield'].find((k) => g.me.items[k] > 0); g.useItem(sh); g.fire(); });
 await host.waitForFunction(() => window.__app.game.lockInfo?.count === 1);
 await host.evaluate(() => { const g = window.__app.game; g.current.angle = 60; g.current.power = 80; g.fire(); });
@@ -92,8 +116,8 @@ await guest.waitForFunction(() => window.__app.game.phase === 'fire', null, { ti
 await host.waitForTimeout(700);
 if (shots) await host.screenshot({ path: `${outDir}/32-online-volley.png` });
 // wait for the volley to finish and next aim to begin on both
-await host.waitForFunction(() => window.__app.game.phase === 'aim' && window.__app.game.round === 2, null, { timeout: 40000 });
-await guest.waitForFunction(() => window.__app.game.phase === 'aim' && window.__app.game.round === 2, null, { timeout: 40000 });
+await host.waitForFunction(() => window.__app.game.phase === 'move' && window.__app.game.round === 2, null, { timeout: 40000 });
+await guest.waitForFunction(() => window.__app.game.phase === 'move' && window.__app.game.round === 2, null, { timeout: 40000 });
 const state = await Promise.all([host, guest].map((p) => p.evaluate(() => {
   const g = window.__app.game;
   let solid = 0; const m = g.terrain.mask; for (let i = 0; i < m.length; i += 7) solid += m[i];
@@ -113,7 +137,9 @@ await guest.keyboard.press('Enter');
 await guest.keyboard.type('gg');
 await guest.keyboard.press('Enter');
 await host.waitForFunction(() => window.__app.game.messages.some((m) => /Guest: gg/.test(m.text)));
-// round 2: let the deadline fire the volley with only the host locked (guest idle) - turn time 45s is too long, so lock both
+// round 2: wait out the move phase, then lock both (turn time 45s is too long to let the deadline fire)
+await host.waitForFunction(() => window.__app.game.phase === 'aim' && window.__app.game.round === 2, null, { timeout: 15000 });
+await guest.waitForFunction(() => window.__app.game.phase === 'aim' && window.__app.game.round === 2, null, { timeout: 15000 });
 await host.evaluate(() => window.__app.game.fire());
 await guest.evaluate(() => window.__app.game.fire());
 await host.waitForFunction(() => window.__app.game.round === 3 && window.__app.game.phase === 'aim', null, { timeout: 40000 });

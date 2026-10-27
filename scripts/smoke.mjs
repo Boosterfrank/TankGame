@@ -46,7 +46,7 @@ await page.waitForTimeout(300);
 if (shots) await page.screenshot({ path: `${outDir}/06-weapons.png` });
 await page.keyboard.press('Escape');
 // first volley: fire and capture mid-flight
-await page.evaluate(() => { const g = window.__app.game; if (g.current) { g.current.angle = 55; g.current.power = 80; g.fire(); } });
+await page.evaluate(() => { const g = window.__app.game; if (g.phase === 'move') g.endMove(); if (g.current) { g.current.angle = 55; g.current.power = 80; g.fire(); } });
 await page.waitForTimeout(1100);
 if (shots) await page.screenshot({ path: `${outDir}/06b-volley.png` });
 await page.waitForTimeout(900);
@@ -58,9 +58,9 @@ const stats = await page.evaluate(async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const log = [];
   for (let round = 0; round < 6 && g.phase !== 'over'; round++) {
-    // wait for aim
+    // wait for aim (end our move phase right away)
     let guard = 0;
-    while (g.phase !== 'aim' && g.phase !== 'over' && guard++ < 400) await wait(50);
+    while (g.phase !== 'aim' && g.phase !== 'over' && guard++ < 400) { if (g.phase === 'move' && !g.waitingPass) g.endMove(); await wait(50); }
     if (g.phase === 'over') break;
     if (g.current) {
       const ids = [...g.current.arsenal.keys()].filter((id) => g.current.ammo(id) > 0);

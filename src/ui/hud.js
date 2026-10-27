@@ -104,19 +104,31 @@ export class HUD {
     this.set('items', items, (v) => { this.q('.item-count').textContent = v ? `${v} left` : 'none left'; });
     let fireState, fireText;
     if (game.phase === 'fire') { fireState = 'busy'; fireText = 'INCOMING'; }
+    else if (game.phase === 'move') {
+      if (!cur) { fireState = 'busy'; fireText = 'SPECTATING'; }
+      else if (cur.moved) { fireState = 'locked'; fireText = game.online ? `PARKED · ${Math.ceil(game.moveTimer)}` : 'PARKED'; }
+      else { fireState = 'ready'; fireText = 'DONE MOVING'; }
+    }
     else if (game.phase !== 'aim') { fireState = 'busy'; fireText = game.phase === 'over' ? 'GAME OVER' : 'WAIT'; }
     else if (!cur) { fireState = 'busy'; fireText = 'SPECTATING'; }
     else if (cur.locked) { fireState = 'locked'; fireText = game.online && game.lockInfo ? `LOCKED IN ${game.lockInfo.count}/${game.lockInfo.needed}` : 'LOCKED IN'; }
     else { fireState = 'ready'; fireText = 'FIRE'; }
     if (game.phase === 'waiting') { fireState = 'busy'; fireText = 'SYNCING'; }
-    this.set('fire', fireState + fireText, () => { const b = this.q('.hud-fire'); b.dataset.state = fireState; b.textContent = fireText; });
+    this.set('fire', fireState + fireText, () => { const b = this.q('.hud-fire'); b.dataset.state = fireState; b.textContent = fireText; b.classList.toggle('long', fireText.length > 8); });
     this.set('mode', game.settings.mode, (m) => {
       this.q('.mode-name').textContent = m === 'team' ? 'TEAM BATTLE' : 'DEATHMATCH';
       this.q('.mode-desc').textContent = m === 'team' ? 'Eliminate the other teams' : 'Destroy your opponents';
     });
     this.set('urgent', !!(cur && !cur.locked && game.phase === 'aim' && game.settings.turnTime > 0 && game.turnTimer < 6), (v) => { this.q('.hud-fire').classList.toggle('urgent', v); });
+    this.set('nodrive', game.phase === 'move' ? (cur?.moved ? 'parked' : 'drive') : game.moveTime > 0 ? 'nodrive' : 'drive', (v) => { this.el.classList.toggle('no-drive', v !== 'drive'); });
     this.set('balance', Math.round((game.balanceFor(t) - 1) * 100), (v) => { this.q('.balance').textContent = v ? `BALANCE ${v > 0 ? '+' : ''}${v}% DMG` : ''; });
-    this.set('hint', game.online ? 'online' : 'local', (v) => { this.q('.mode-hint').innerHTML = v === 'online' ? '<b>ENTER</b>, <b>T</b> OR <b>/</b> TO CHAT<br><b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>SPACE</b> FIRE' : '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>A D</b> DRIVE &nbsp; <b>SPACE</b> FIRE'; });
+    const hintKey = `${game.online ? 'online' : 'local'}:${game.phase === 'move' ? 'move' : game.moveTime > 0 ? 'aim' : 'both'}`;
+    this.set('hint', hintKey, (v) => {
+      const [net, ph] = v.split(':');
+      const chat = net === 'online' ? '<b>ENTER</b>, <b>T</b> OR <b>/</b> TO CHAT<br>' : '';
+      const body = ph === 'move' ? '<b>A D</b> DRIVE &nbsp; <b>SPACE</b> DONE MOVING' : ph === 'aim' ? '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>SPACE</b> FIRE' : '<b>&larr; &rarr;</b> AIM &nbsp; <b>&uarr; &darr;</b> POWER &nbsp; <b>A D</b> DRIVE &nbsp; <b>SPACE</b> FIRE';
+      this.q('.mode-hint').innerHTML = chat + body;
+    });
     this.set('canAct', !!(cur && !cur.locked && game.phase === 'aim'), (v) => { this.el.classList.toggle('inactive', !v); if (!v) this.closeOverlay(); });
     if (this.overlayMode === 'weapons' && this.overlayTank !== t) this.renderWeapons(game, t);
   }

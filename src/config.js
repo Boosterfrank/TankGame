@@ -55,7 +55,8 @@ export const DEFAULT_SETTINGS = {
   mode: 'deathmatch',      // 'deathmatch' | 'team'
   hp: 100,                 // 100 | 150 | 200 | 300
   wind: 'low',             // 'none' | 'low' | 'medium' | 'high' | 'crazy'
-  turnTime: 30,            // 15 | 30 | 45 | 60 | 0 (unlimited)
+  turnTime: 30,
+  moveTime: 8,             // seconds everyone gets to drive before the aiming phase (0 = drive while aiming)            // 15 | 30 | 45 | 60 | 0 (unlimited)
   tracers: true,
   items: true,
   map: 'random',

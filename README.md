@@ -47,6 +47,9 @@ tank is destroyed at the next volley; if the host leaves, the next player become
 crates are picked up the moment you drive into one; the pickup is replayed for everyone at the
 next volley.
 
+The relay timestamps its round messages: clients measure the clock offset and show a turn timer
+that ends 2.5 s before the relay closes the round, so a shot locked at 0:00 still counts.
+
 ## Deploying the game to Cloudflare Pages
 
 1. Push the repo to GitHub and in the Cloudflare dashboard choose Workers & Pages → Create →
@@ -57,8 +60,11 @@ next volley.
 
 ## How it works
 
-- **Everyone aims at once.** Humans aim (passing the keyboard in hot-seat games), bots plan
-  their shots, and when the turn timer ends or you press FIRE every shell launches together.
+- **Move, then fire.** Each round opens with a move phase (8 seconds by default; the lobby's
+  **Move Phase** setting offers 5, 8, 12 or off) in which everyone drives at once; DONE MOVING parks
+  your tank early. Then the aim phase starts: nobody drives, everyone aims (passing the keyboard in
+  hot-seat games), bots plan their shots, and when the turn timer ends or you press FIRE every shell
+  launches together. With the move phase off you drive while aiming, as before.
 - **Terrain is destructible** down to the pixel: craters, tunnels, dirt walls and buried tanks.
 - **Wind** changes every round and pushes shells sideways; lasers ignore it.
 - **XP and levels.** Damage you deal earns XP. Each level unlocks new weapon families
@@ -95,7 +101,9 @@ next volley.
   (an item, preferring types you have run out of) and repair crates. Their contents are decided when
   they spawn, so online players always agree on what was inside.
 - Deathmatch or Team Battle, 100–300 HP, five wind levels, turn timers, bot difficulty,
-  ten map styles and a sandbox mode that unlocks every weapon for one game.
+  ten map styles and a sandbox mode that unlocks every weapon for one game. In an online lobby
+  everyone picks their own team and the host (or a developer) can place anyone, bots included;
+  teams take effect in Team Battle.
 
 ### Controls
 
@@ -135,7 +143,10 @@ treats that player as a host: settings, bots, kicks and a forced start all work 
 each player row gains buttons to add levels, set an exact level, or hand out gears and XP. Grants
 are delivered to the target client, applied to its saved profile and re-reported to the room, so
 the new level shows up for everyone. The dev panel's ROOM section has bulk versions (everyone +5,
-all bots to level 60, force start). Note that the password is kept in this browser's localStorage
+all bots to level 60, force start). Mid-game, the panel's GAME section takes a **target** tank: heal,
+kill, full fuel, +5 ammo of any weapon, +1 of everything, the H-Bomb and all items can be given to
+anyone, and online they are replayed by every client with your next lock-in so arsenals stay in
+lockstep. A verified developer can also grant levels, gears and XP to any human in the match. Note that the password is kept in this browser's localStorage
 once entered so the relay can verify later sessions; LOCK in the panel clears it.
 
 A hidden developer console (profile cheats, god mode, infinite ammo, time scale, debug overlays,

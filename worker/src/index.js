@@ -87,7 +87,7 @@ export default {
 function freshState(code = '') {
   return {
     code, phase: 'empty', hostId: null, players: {}, order: [], bots: {},
-    settings: { mode: 'deathmatch', hp: 100, wind: 'low', turnTime: 30, tracers: true, items: true, crates: true, difficulty: 'Normal', arsenal: 'unlocked', loadout: 'random', map: 'random', balance: true },
+    settings: { mode: 'deathmatch', hp: 100, wind: 'low', turnTime: 30, tracers: true, items: true, crates: true, difficulty: 'Normal', arsenal: 'unlocked', loadout: 'random', moveTime: 8, map: 'random', balance: true },
     isPublic: true, seed: 0, round: 0, locks: {}, done: {}, left: [], hostSnapshot: null, deadline: null, startAt: null,
     created: Date.now(), updated: Date.now(),
   };
@@ -204,34 +204,37 @@ export class Room {
     else await this.gameMessageFrom(id, p, isHost, msg);
   }
 
+  // Developer: give levels / gears / XP to a player (or set a level outright). Works in the lobby and mid-game.
+  grant(p, msg) {
+    const s = this.state;
+    if (!p.dev) return;
+    const target = s.players[msg.id];
+    if (!target) return;
+    const levels = clampNum(msg.levels, -98, 98), gears = clampNum(msg.gears, -1000000, 1000000), xp = clampNum(msg.xp, 0, 1000000);
+    const level = msg.level != null ? clampNum(msg.level, 1, 99) : null;
+    if (target.bot) { if (s.phase === 'lobby') target.level = Math.max(1, Math.min(60, level ?? target.level + levels)); return; }
+    for (const w of this.sockets()) if (this.idOf(w) === msg.id) this.send(w, { type: 'devGrant', from: p.name, levels, level, gears, xp });
+    const parts = [level != null ? `level ${level}` : null, levels ? `${levels > 0 ? '+' : ''}${levels} levels` : null, gears ? `${gears > 0 ? '+' : ''}${gears} gears` : null, xp ? `+${xp} XP` : null].filter(Boolean);
+    if (parts.length) this.broadcast({ type: 'chat', system: true, text: `${p.name} (dev) gave ${target.name}: ${parts.join(', ')}` });
+  }
+
   async lobbyMessageFrom(id, p, isHost, msg) {
     const s = this.state;
     const admin = isHost || !!p.dev; // verified developers get host powers
     let changed = true;
     switch (msg.type) {
-      case 'team': p.team = Math.max(1, Math.min(4, +msg.team || 1)); break;
-      case 'ready': p.ready = !!msg.ready; break;
-      case 'update': { // the player re-reporting its profile (level, unlocks, tiers, cosmetics)
-        const f = profileFields({ ...p, ...msg });
-        Object.assign(p, f);
-        break;
-      }
-      case 'grant': { // developer: give levels / gears / XP to a player, or set a level outright
-        if (!p.dev) return;
-        const target = s.players[msg.id];
+      case 'team': { // your own team, or anyone's (bots included) for the host / a developer
+        const target = msg.id && msg.id !== id ? (admin ? s.players[msg.id] : null) : p;
         if (!target) return;
-        const levels = clampNum(msg.levels, -98, 98), gears = clampNum(msg.gears, -1000000, 1000000), xp = clampNum(msg.xp, 0, 1000000);
-        const level = msg.level != null ? clampNum(msg.level, 1, 99) : null;
-        if (target.bot) { target.level = Math.max(1, Math.min(60, level ?? target.level + levels)); break; }
-        for (const w of this.sockets()) if (this.idOf(w) === msg.id) this.send(w, { type: 'devGrant', from: p.name, levels, level, gears, xp });
-        const parts = [level != null ? `level ${level}` : null, levels ? `${levels > 0 ? '+' : ''}${levels} levels` : null, gears ? `${gears > 0 ? '+' : ''}${gears} gears` : null, xp ? `+${xp} XP` : null].filter(Boolean);
-        if (parts.length) this.broadcast({ type: 'chat', system: true, text: `${p.name} (dev) gave ${target.name}: ${parts.join(', ')}` });
-        changed = false;
+        target.team = Math.max(1, Math.min(4, +msg.team || 1));
         break;
       }
+      case 'ready': p.ready = !!msg.ready; break;
+      case 'update': Object.assign(p, profileFields({ ...p, ...msg })); break; // player re-reporting its profile
+      case 'grant': this.grant(p, msg); changed = false; break;
       case 'settings': {
         if (!admin || !msg.settings || typeof msg.settings !== 'object') return;
-        const allowed = ['mode', 'hp', 'wind', 'turnTime', 'tracers', 'items', 'crates', 'difficulty', 'arsenal', 'loadout', 'map', 'balance'];
+        const allowed = ['mode', 'hp', 'wind', 'turnTime', 'moveTime', 'tracers', 'items', 'crates', 'difficulty', 'arsenal', 'loadout', 'map', 'balance'];
         for (const k of allowed) if (k in msg.settings) s.settings[k] = typeof msg.settings[k] === 'string' ? clampStr(msg.settings[k], 24) : msg.settings[k];
         break;
       }
@@ -293,21 +296,27 @@ export class Room {
     s.seed = Math.floor(Math.random() * 2 ** 31);
     s.round = 1;
     s.locks = {}; s.done = {}; s.left = []; s.hostSnapshot = null;
-    s.deadline = this.nextDeadline();
+    Object.assign(s, this.roundTimes());
     for (const id of s.order) s.players[id].ready = false;
     await this.save();
     this.broadcast({
-      type: 'start', seed: s.seed, settings: s.settings, hostId: s.hostId, round: 1, deadline: s.deadline,
+      type: 'start', seed: s.seed, settings: s.settings, hostId: s.hostId, round: 1, ...this.timing(),
       players: s.order.map((id) => { const p = s.players[id]; return { id, name: p.name, level: p.level, team: p.team, bot: !!p.bot, unlockedIds: p.unlockedIds, tiers: p.tiers, cosmetics: p.cosmetics || null }; }),
     });
     await this.publish();
     await this.armAlarm();
   }
 
-  nextDeadline() {
-    const t = +this.state.settings.turnTime || 0;
-    return t > 0 ? Date.now() + t * 1000 + LOCK_GRACE_MS : null;
+  // Round timing: an optional move window, then the aim window. `deadline` is when the relay closes
+  // the round (clients are shown LOCK_GRACE_MS less, so a shot locked at 0:00 still arrives in time).
+  roundTimes() {
+    const mt = Math.max(0, Math.min(60, +this.state.settings.moveTime || 0)), tt = +this.state.settings.turnTime || 0;
+    const now = Date.now();
+    const moveUntil = mt > 0 ? now + mt * 1000 : null;
+    const deadline = tt > 0 ? (moveUntil || now) + tt * 1000 + LOCK_GRACE_MS : null;
+    return { moveUntil, deadline };
   }
+  timing() { const s = this.state; return { moveUntil: s.moveUntil || null, deadline: s.deadline ? s.deadline - LOCK_GRACE_MS : null, now: Date.now() }; }
 
   async armAlarm() {
     const s = this.state;
@@ -320,13 +329,15 @@ export class Room {
   async gameMessageFrom(id, p, isHost, msg) {
     const s = this.state;
     switch (msg.type) {
+      case 'update': Object.assign(p, profileFields({ ...p, ...msg })); await this.save(); return;
+      case 'grant': this.grant(p, msg); return;
       case 'lock': {
         if (s.phase !== 'game' || +msg.round !== s.round || s.locks[id]) return;
         s.locks[id] = {
           x: +msg.x || 0, shot: msg.shot && typeof msg.shot === 'object' ? { weaponId: clampStr(msg.shot.weaponId, 24), angle: +msg.shot.angle || 0, power: +msg.shot.power || 0 } : null,
           items: Array.isArray(msg.items) ? msg.items.slice(0, 24) : [],
           crates: Array.isArray(msg.crates) ? msg.crates.slice(0, 8).map((c) => +c || 0) : [],
-          dev: Array.isArray(msg.dev) ? msg.dev.slice(0, 12).filter((o) => o && typeof o.type === 'string').map((o) => ({ type: clampStr(o.type, 16), x: +o.x || 0, v: +o.v || 0, seed: +o.seed || 0, kind: clampStr(o.kind, 12), style: clampStr(o.style, 16) })) : [],
+          dev: Array.isArray(msg.dev) ? msg.dev.slice(0, 12).filter((o) => o && typeof o.type === 'string').map((o) => ({ type: clampStr(o.type, 16), x: +o.x || 0, v: +o.v || 0, seed: +o.seed || 0, kind: clampStr(o.kind, 12), style: clampStr(o.style, 16), target: o.target == null || o.target === '' ? null : clampNum(o.target, 0, 15), weapon: clampStr(o.weapon, 24), n: clampNum(o.n, 0, 99) })) : [],
           god: !!msg.god,
           bots: isHost && msg.bots && typeof msg.bots === 'object' ? msg.bots : undefined,
         };
@@ -377,9 +388,9 @@ export class Room {
     s.phase = 'game';
     s.round++;
     s.locks = {}; s.done = {};
-    s.deadline = this.nextDeadline();
+    Object.assign(s, this.roundTimes());
     await this.save();
-    this.broadcast({ type: 'aim', round: s.round, deadline: s.deadline, snapshot: s.hostSnapshot });
+    this.broadcast({ type: 'aim', round: s.round, ...this.timing(), snapshot: s.hostSnapshot });
     s.hostSnapshot = null;
     await this.armAlarm();
   }
